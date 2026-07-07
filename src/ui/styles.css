@@ -33,6 +33,13 @@ canvas { display: block; }
 
 button { font-family: var(--font-ui); }
 
+/* ── Flash a schermo (impatto esplosione / vittoria) ─────────────────────── */
+#flash {
+  position: fixed; inset: 0; pointer-events: none;
+  opacity: 0; z-index: 50; background: #fff;
+  transition: opacity 0.5s ease-out;
+}
+
 /* ── HUD overlay ─────────────────────────────────────────────────────────── */
 #hud { position: fixed; inset: 0; pointer-events: none; color: var(--c-paper); z-index: 10; }
 

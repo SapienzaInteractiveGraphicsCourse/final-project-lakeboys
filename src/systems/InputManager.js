@@ -9,15 +9,17 @@
 
 import * as THREE from 'three';
 import { Tween, Easing } from '@tweenjs/tween.js';
+import { BOMB_POS } from '../scene/config.js';
 
 export class InputManager {
-  constructor({ camera, renderer, cardSystem, gameManager, sceneManager, hud }) {
+  constructor({ camera, renderer, cardSystem, gameManager, sceneManager, hud, particles }) {
     this.camera       = camera;
     this.renderer     = renderer;
     this.cardSystem   = cardSystem;
     this.gameManager  = gameManager;
     this.sceneManager = sceneManager;   // per abilitare/disabilitare OrbitControls
     this.hud          = hud;
+    this.particles    = particles;      // scintille sugli impatti delle carte
 
     // REQUIRES: THREE.Raycaster — unico punto di interazione mouse ↔ scena 3D
     this.raycaster = new THREE.Raycaster();
@@ -316,8 +318,8 @@ export class InputManager {
   }
 
   // ── Play Hand ────────────────────────────────────────────────────────────
-  // Le carte scelte si schierano, si convertono in energia e la mano si
-  // ricompone pescando dal mazzo.
+  // Le carte scelte volano verso la bomba (caricano il DISINNESCO); poi la
+  // mano si ricompone pescando dal mazzo.
 
   _onPlayHand() {
     if (this.gameManager.phase !== 'player' || this.gameManager.isOver) return;
@@ -337,7 +339,7 @@ export class InputManager {
       setTimeout(() => this._stageCard(card, i, n), i * 80);
     });
 
-    // FASE 2 — dopo una breve pausa, partono una a una e si dissolvono
+    // FASE 2 — dopo una breve pausa, partono una a una verso la bomba
     const launchStart = n * 80 + 340;
     played.forEach((card, i) => {
       setTimeout(() => this._launchCard(card), launchStart + i * 70);
@@ -397,10 +399,10 @@ export class InputManager {
       .start();
   }
 
-  // FASE 2 — la carta parte in vite verso l'alto e si dissolve in energia
+  // FASE 2 — la carta parte in vite verso la bomba e si converte in energia
   _launchCard(card) {
     new Tween(card.group.position)
-      .to({ x: card.group.position.x, y: 4.2, z: 0.6 }, 360)
+      .to({ x: BOMB_POS.x + 1.6, y: 2.4, z: BOMB_POS.z + 1.2 }, 360)
       .easing(Easing.Quadratic.In)
       .start();
     new Tween(card.group.rotation)
@@ -410,6 +412,13 @@ export class InputManager {
     new Tween(card.group.scale)
       .to({ x: 0.05, y: 0.05, z: 0.05 }, 360)
       .easing(Easing.Quadratic.In)
+      .onComplete(() => {
+        // Piccolo impatto energetico sulla bomba per ogni carta
+        this.particles?.burst({
+          position: card.group.position.clone(),
+          color: 0x88ffcc, count: 10, speed: 1.8, life: 450, gravity: 2, size: 0.06,
+        });
+      })
       .start();
   }
 

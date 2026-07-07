@@ -5,7 +5,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { getWoodMaps } from './TextureFactory.js';
-import { FLOOR_Y, CEIL_Y, TABLE_TOP_Y, ROOM_BACK_Z } from './config.js';
+import {
+  BOMB_POS, FLOOR_Y, CEIL_Y, TABLE_TOP_Y, ROOM_BACK_Z,
+} from './config.js';
 
 export class SceneManager {
   constructor() {
@@ -15,13 +17,22 @@ export class SceneManager {
     this.clock    = new THREE.Clock();
 
     // Lights — kept as instance properties so other modules can modify them
-    this.spotLight    = null;
+    this.spotLight    = null;  // Bedside lamp spotlight (now hangs above the bomb)
+    this.redLight     = null;  // Bomb warning light (parented to bomb in main.js)
     this.ambientLight = null;
     this.controls     = null;
 
     // Bedside lamp group (cord + cap + shade + bulb)
     this.lampGroup    = null;
     this.lampBulb     = null;
+
+    // Cables connettono il tavolo alla bomba — si illuminano col voltaggio
+    this.cables       = [];
+    this._voltageProgress = 0;
+    this._redPulse        = 0;   // picco transitorio della luce rossa quando la bomba è colpita
+
+    // Faretto drammatico dedicato
+    this.bombSpot  = null;
 
     // Pulviscolo atmosferico (THREE.Points)
     this.dust = null;
@@ -35,6 +46,7 @@ export class SceneManager {
     this._initLights();
     this._initTable();
     this._initBedsideLamp();
+    this._initCables();
     this._initAtmosphere();
     this._initDust();
     this._initControls();
@@ -49,9 +61,12 @@ export class SceneManager {
       powerPreference: 'high-performance',   // preferisci la GPU dedicata sui portatili
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    // PERF: su display retina devicePixelRatio=2 ⇒ 4× i pixel da ombreggiare.
+    // Cap a 1.5: dimezza quasi il lavoro per-frame con perdita di nitidezza minima.
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 
     this.renderer.shadowMap.enabled = true;
+    // PERF: PCF semplice invece di PCFSoft — ombre molto più economiche.
     this.renderer.shadowMap.type    = THREE.PCFShadowMap;
 
     this.renderer.toneMapping         = THREE.ACESFilmicToneMapping;
@@ -78,22 +93,25 @@ export class SceneManager {
 
   _initScene() {
     this.scene.background = new THREE.Color(0x05060a);
-    // Fog leggera: dà profondità al bunker senza nascondere il tavolo
+    // Fog leggera: dà profondità al bunker senza nascondere la bomba
     this.scene.fog = new THREE.FogExp2(0x06070c, 0.026);
 
     // REQUIRES: Texture — environment map PROCEDURALE (PMREM da RoomEnvironment,
-    // scena generata via codice: nessuna immagine importata).
+    // scena generata via codice: nessuna immagine importata). Dà riflessi
+    // realistici a scocca della bomba e cornici metalliche delle carte.
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    // MOLTO sottile: solo un filo di riflesso sui metalli, il bunker resta buio
     this.scene.environmentIntensity = 0.015;
     pmrem.dispose();
   }
 
   // ── Lights ──────────────────────────────────────────────────────────────────
   // REQUIRES: Dynamic lighting — at least one dynamic light (SpotLight)
+  // REQUIRES: Procedural animation — red light flicker driven by Math.sin in update()
 
   _initLights() {
-    // 1. SpotLight principale: illumina il tavolo da gioco del giocatore
+    // 1. SpotLight principale: illumina il tavolo da gioco del giocatore (le carte)
     this.spotLight = new THREE.SpotLight(0xfff0cc, 120);
     this.spotLight.position.set(0, 6.0, 4.5);
     this.spotLight.target.position.set(0, TABLE_TOP_Y, 3.0);
@@ -102,13 +120,28 @@ export class SceneManager {
     this.spotLight.decay    = 2;
     this.spotLight.distance = 20;
     this.spotLight.castShadow = true;
+    // PERF: 1024 invece di 2048 — un quarto della memoria/fill della shadow map.
     this.spotLight.shadow.mapSize.set(1024, 1024);
     this.spotLight.shadow.camera.near = 0.5;
     this.spotLight.shadow.camera.far  = 18;
     this.spotLight.shadow.bias        = -0.001;
     this.scene.add(this.spotLight, this.spotLight.target);
 
-    // 2. Ambient — schiarisce leggermente tutta la scena
+    // 2. Faretto scenico sulla BOMBA gigante (taglio drammatico)
+    // PERF: niente ombra qui — ogni luce con castShadow aggiunge un render
+    // completo della scena per frame. Teniamo solo l'ombra del tavolo.
+    this.bombSpot = new THREE.SpotLight(0xffd2b0, 140, 22, Math.PI / 6, 0.5, 2);
+    this.bombSpot.position.set(BOMB_POS.x + 1.5, CEIL_Y - 0.6, BOMB_POS.z + 3.5);
+    this.bombSpot.target.position.set(BOMB_POS.x, FLOOR_Y + 2.4, BOMB_POS.z);
+    this.scene.add(this.bombSpot, this.bombSpot.target);
+
+    // 3. Red PointLight — bomb warning indicator (riposizionata nella scocca in main.js)
+    //    distance ampia perché la bomba è enorme
+    this.redLight = new THREE.PointLight(0xff2200, 1.2, 14, 2);
+    this.redLight.position.set(0, 0.8, 0);
+    this.scene.add(this.redLight);
+
+    // 4. Ambient — schiarisce leggermente tutta la scena
     this.ambientLight = new THREE.AmbientLight(0x1a1f2e, 2.3);
     this.scene.add(this.ambientLight);
   }
@@ -216,10 +249,101 @@ export class SceneManager {
     this.scene.add(g);
   }
 
+  // ── Cables ─────────────────────────────────────────────────────────────────
+  // Cavi che partono dai bordi del tavolo e convergono sulla base della bomba.
+  // Ogni cavo ha una soglia di voltaggio: si illumina progressivamente.
+
+  _initCables() {
+    const TABLE_Y = TABLE_TOP_Y;   // superficie del banco
+    // Base della bomba gigante, lato rivolto verso il banco
+    const BASE = new THREE.Vector3(BOMB_POS.x + 1.6, FLOOR_Y + 0.55, BOMB_POS.z + 1.4);
+
+    // Partono dal lato sinistro del banco e attraversano la stanza fino alla bomba
+    const specs = [
+      { start: new THREE.Vector3(-6.2, TABLE_Y, -2.6), color: 0xff3344, threshold: 0.00 },
+      { start: new THREE.Vector3(-6.2, TABLE_Y,  0.2), color: 0xffcc22, threshold: 0.25 },
+      { start: new THREE.Vector3(-5.2, TABLE_Y, -3.6), color: 0x33ff88, threshold: 0.50 },
+      { start: new THREE.Vector3(-5.2, TABLE_Y,  1.4), color: 0x44ccff, threshold: 0.75 },
+    ];
+
+    specs.forEach((spec, idx) => {
+      // Cade dal bordo del banco verso il pavimento
+      const edge     = new THREE.Vector3(spec.start.x - 0.7, TABLE_Y - 0.6, spec.start.z);
+      // Striscia sul pavimento verso la bomba
+      const floorMid = new THREE.Vector3(
+        (spec.start.x + BASE.x) * 0.5,
+        FLOOR_Y + 0.12,
+        (spec.start.z + BASE.z) * 0.5,
+      );
+      // Risale sulla piattaforma fino al connettore
+      const near = new THREE.Vector3(BASE.x + 0.7, FLOOR_Y + 0.25, BASE.z + 0.2);
+
+      const curve = new THREE.CatmullRomCurve3(
+        [spec.start, edge, floorMid, near, BASE.clone()],
+        false,
+        'catmullrom',
+        0.4,
+      );
+      const geom = new THREE.TubeGeometry(curve, 96, 0.038, 8, false);
+
+      // Materiale emissivo: parte spento, lo accendiamo via setVoltageProgress
+      const mat = new THREE.MeshStandardMaterial({
+        color:    new THREE.Color(spec.color).multiplyScalar(0.25),
+        emissive: new THREE.Color(spec.color),
+        emissiveIntensity: 0.05,
+        roughness: 0.55,
+        metalness: 0.35,
+      });
+
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.castShadow    = true;
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+
+      // PERF: solo i cavi pari hanno una PointLight reale (2 invece di 4).
+      // Le luci a intensità 0 pesano comunque nello shader, quindi ne creiamo meno.
+      let pl = null;
+      if (idx % 2 === 0) {
+        pl = new THREE.PointLight(spec.color, 0, 4.5, 2);
+        pl.position.copy(floorMid);
+        pl.position.y = FLOOR_Y + 0.5;
+        this.scene.add(pl);
+      }
+
+      // Connettore visivo alla base della bomba (piccolo cilindro)
+      const plugMat = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a, roughness: 0.6, metalness: 0.8,
+        emissive: new THREE.Color(spec.color),
+        emissiveIntensity: 0.0,
+      });
+      const plug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.12, 10), plugMat);
+      plug.position.copy(BASE);
+      this.scene.add(plug);
+
+      this.cables.push({
+        mesh, light: pl, plug, baseColor: spec.color, threshold: spec.threshold,
+      });
+    });
+  }
+
+  // ── API: aggiorna l'illuminazione dei cavi in base al voltaggio ────────────
+  // progress ∈ [0,1]
+  setVoltageProgress(progress) {
+    this._voltageProgress = Math.max(0, Math.min(1, progress || 0));
+  }
+
+  // ── API: picco transitorio della luce rossa (bomba colpita) ─────────────────
+  pulseRedLight(boost = 3) {
+    this._redPulse = Math.max(this._redPulse, boost);
+  }
+
   // ── Atmosphere ──────────────────────────────────────────────────────────────
 
   _initAtmosphere() {
-    // Warm fill per l'area di gioco davanti alla camera
+    // PERF: ogni PointLight pesa su OGNI fragment della scena (renderer forward).
+    // Meglio poche luci chiave che tanti fill.
+
+    // Warm fill per l'area carte
     this.cardLight = new THREE.PointLight(0xffe8cc, 26, 9, 2);
     this.cardLight.position.set(0, 3.0, 5.0);
     this.scene.add(this.cardLight);
@@ -287,10 +411,17 @@ export class SceneManager {
   }
 
   // ── Per-frame update ────────────────────────────────────────────────────────
-  // REQUIRES: Procedural animation — dondolii e flicker via Math.sin, no keyframes
+  // REQUIRES: Procedural animation — red light flicker via sinusoidal code, no keyframes
 
   update(/* time */) {
     const t = this.clock.getElapsedTime();
+
+    // Compound sine flicker per la luce rossa della bomba
+    const base    = Math.sin(t * 4.1);
+    const tremolo = Math.sin(t * 13.7) * 0.3;
+    const flicker = 0.55 + 0.45 * Math.abs(base + tremolo);
+    this.redLight.intensity = flicker * 1.4 + this._redPulse;
+    this._redPulse *= 0.90;   // decadimento del picco da impatto
 
     // Lampada da comodino: dondolio lento + leggero flicker della lampadina
     if (this.lampGroup) {
@@ -301,6 +432,19 @@ export class SceneManager {
       const lampFlick = 1.0 + Math.sin(t * 9.3) * 0.05 + Math.sin(t * 23.1) * 0.02;
       this.lampBulb.material.emissiveIntensity = 4.5 * lampFlick;
     }
+
+    // Cavi: ogni cavo si attiva quando il progresso supera la sua soglia,
+    // poi pulsa proceduralmente per dare l'impressione di "energia che scorre".
+    this.cables.forEach(c => {
+      const over = this._voltageProgress - c.threshold;        // quanto siamo oltre la soglia
+      // attivazione graduale: 0 sotto soglia, sale fino a 1 nei 0.25 successivi
+      const act  = Math.max(0, Math.min(1, over / 0.25));
+      const pulse = 0.75 + 0.25 * Math.sin(t * 4.2 + c.threshold * 9);
+      const emissive = act > 0 ? (1.4 * pulse + 0.4) * act + 0.05 : 0.05;
+      c.mesh.material.emissiveIntensity = emissive;
+      if (c.light) c.light.intensity    = act * 1.8 * pulse;
+      c.plug.material.emissiveIntensity = act * 1.6;
+    });
 
     // Pulviscolo: lento moto rotatorio + galleggiamento sinusoidale
     if (this.dust) {

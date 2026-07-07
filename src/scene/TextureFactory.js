@@ -108,6 +108,93 @@ export function woodRoughnessMap(sz = 256) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
+// METALLO — Color · Normal · Roughness · Metalness
+// ════════════════════════════════════════════════════════════════════════════════
+
+// REQUIRES: Color map — verniciatura militare verde con graffi procedurali
+export function metalColorMap(sz = 256) {
+  return makeTex(sz, (ctx, s) => {
+    // Base: verde militare
+    ctx.fillStyle = '#2b3a1f';
+    ctx.fillRect(0, 0, s, s);
+
+    // Mottling: piccoli rettangoli semi-trasparenti sovrapposti
+    for (let i = 0; i < 100; i++) {
+      const alpha = (Math.random() * 0.05 + 0.01) * (Math.random() > 0.5 ? 1 : -1);
+      const col   = alpha > 0 ? `rgba(255,255,200,${Math.abs(alpha)})` : `rgba(0,0,0,${Math.abs(alpha)})`;
+      ctx.fillStyle = col;
+      ctx.fillRect(Math.random() * s, Math.random() * s, Math.random() * 14 + 3, Math.random() * 14 + 3);
+    }
+
+    // Graffi lineari (angoli random, lunghezze variabili)
+    for (let i = 0; i < 50; i++) {
+      const x0  = Math.random() * s;
+      const y0  = Math.random() * s;
+      const ang = Math.random() * Math.PI;
+      const len = Math.random() * 38 + 6;
+      ctx.strokeStyle = `rgba(165,175,145,${Math.random() * 0.30 + 0.04})`;
+      ctx.lineWidth   = Math.random() * 0.65 + 0.15;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x0 + Math.cos(ang) * len, y0 + Math.sin(ang) * len);
+      ctx.stroke();
+    }
+  });
+}
+
+// REQUIRES: Normal map — piastrellatura metallica + graffi in rilievo
+export function metalNormalMap(sz = 256) {
+  return makeTex(sz, (ctx, s) => {
+    const img = ctx.createImageData(s, s);
+    const d   = img.data;
+
+    for (let y = 0; y < s; y++) {
+      for (let x = 0; x < s; x++) {
+        const i = (y * s + x) * 4;
+        // Microgeometria della lamiera: sottile modulazione su griglia 32 px
+        const fx    = ((x % 32) / 32 - 0.5) * 3.5;
+        const fy    = ((y % 32) / 32 - 0.5) * 3.5;
+        const noise = (Math.random() - 0.5) * 4; // graffi casuali
+
+        d[i]   = Math.max(0, Math.min(255, 128 + fx + noise));
+        d[i+1] = Math.max(0, Math.min(255, 128 + fy));
+        d[i+2] = 255;
+        d[i+3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  });
+}
+
+// REQUIRES: Roughness map — metallo verniciato: semi-opaco (0.40–0.58)
+export function metalRoughnessMap(sz = 128) {
+  return makeTex(sz, (ctx, s) => {
+    const img = ctx.createImageData(s, s);
+    const d   = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.max(0, Math.min(255, 115 + (Math.random() - 0.5) * 38));
+      d[i] = d[i+1] = d[i+2] = v;
+      d[i+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  });
+}
+
+// REQUIRES: Metalness map — alta metallicità con variazioni per usura vernice
+export function metalMetalnessMap(sz = 128) {
+  return makeTex(sz, (ctx, s) => {
+    const img = ctx.createImageData(s, s);
+    const d   = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.max(0, Math.min(255, 200 + (Math.random() - 0.5) * 28));
+      d[i] = d[i+1] = d[i+2] = v;
+      d[i+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
 // CARTE — Color (olografico PCB) · Normal · Roughness
 // ════════════════════════════════════════════════════════════════════════════════
 
@@ -325,6 +412,15 @@ export function getWoodMaps(tileX = 3.5, tileY = 2.2) {
     map:          tile(woodColorMap(512),    tileX, tileY),
     normalMap:    tile(woodNormalMap(512),   tileX, tileY),
     roughnessMap: tile(woodRoughnessMap(256), tileX, tileY),
+  };
+}
+
+export function getMetalMaps() {
+  return {
+    map:          metalColorMap(256),
+    normalMap:    metalNormalMap(256),
+    roughnessMap: metalRoughnessMap(128),
+    metalnessMap: metalMetalnessMap(128),
   };
 }
 
