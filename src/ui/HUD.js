@@ -27,6 +27,8 @@ export class HUD {
       btnDiscard:      $('btn-discard'),
       btnSort:         $('btn-sort'),
       btnHint:         $('btn-hint'),
+      btnMute:         $('btn-mute'),
+      btnView:         $('btn-view'),
       scoreReveal:     $('score-reveal'),
       endOverlay:      $('end-overlay'),
       legend:          $('combo-legend'),
@@ -200,6 +202,14 @@ export class HUD {
 
   setSortLabel(mode) {
     this._text(this.el.btnSort, mode === 'value' ? '⇅ Valore' : '⇅ Seme');
+  }
+
+  setMuteLabel(muted) {
+    this._text(this.el.btnMute, muted ? '🔇 Audio' : '🔊 Audio');
+  }
+
+  setViewLabel(view) {
+    this._text(this.el.btnView, view === 'first' ? '👁 1ª Persona' : '👁 3ª Persona');
   }
 
   // ── Schermata di fine partita ───────────────────────────────────────────────

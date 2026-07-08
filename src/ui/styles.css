@@ -110,6 +110,11 @@ button { font-family: var(--font-ui); }
   font-size: 13px; letter-spacing: 1.5px; color: var(--c-dim); white-space: nowrap;
 }
 
+#top-buttons {
+  position: absolute; top: 84px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 10px;
+}
+
 /* ── Zona azione (in basso al centro) ────────────────────────────────────── */
 #bottom-center {
   position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
@@ -163,6 +168,8 @@ button { font-family: var(--font-ui); }
 #btn-sort:hover:not(:disabled) { background: #6a6455; color: #171410; }
 #btn-hint { border: 1px solid var(--c-accent); color: var(--c-accent); }
 #btn-hint:hover:not(:disabled) { background: var(--c-accent); color: #171410; }
+#btn-view, #btn-mute { border: 1px solid var(--c-info); color: var(--c-info); }
+#btn-view:hover, #btn-mute:hover { background: var(--c-info); color: #171410; }
 .btn:disabled { border-color: #3a362d; color: #55503f; cursor: default; box-shadow: none; background: transparent; }
 
 /* ── Legenda combo (in basso a sinistra): tabella da manuale ─────────────── */

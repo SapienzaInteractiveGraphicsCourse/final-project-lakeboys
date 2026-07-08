@@ -3,8 +3,8 @@
 //
 // Architettura (src/):
 //   core/     logica pura (stato, combo) — nessuna dipendenza da DOM/Three
-//   scene/    mondo 3D (scena, stanza, bomba, carte)
-//   systems/  sistemi di gioco (carte 3D, input, effetti di regia)
+//   scene/    mondo 3D (scena, stanza, bomba, artificiere, carte)
+//   systems/  sistemi di gioco (carte 3D, input, audio, effetti di regia)
 //   ui/       HUD e overlay DOM
 //   GameManager.js orchestratore dei turni
 
@@ -13,8 +13,11 @@ import { update as tweenUpdate } from '@tweenjs/tween.js';
 import { SceneManager } from './src/scene/SceneManager.js';
 import { RoomModel }    from './src/scene/RoomModel.js';
 import { BombModel }    from './src/scene/BombModel.js';
+import { PlayerModel }  from './src/scene/PlayerModel.js';
+import { DeckModel }    from './src/scene/DeckModel.js';
 import { CardSystem }   from './src/systems/CardSystem.js';
 import { InputManager } from './src/systems/InputManager.js';
+import { AudioManager } from './src/systems/AudioManager.js';
 import { Effects }      from './src/systems/Effects.js';
 import { Particles }    from './src/systems/Particles.js';
 import { HUD }          from './src/ui/HUD.js';
@@ -24,10 +27,15 @@ import { GameManager }  from './src/GameManager.js';
 const sceneManager = new SceneManager();
 const roomModel    = new RoomModel();
 const bombModel    = new BombModel();
+const playerModel  = new PlayerModel();      // l'artificiere (personaggio del giocatore)
+const deckModel    = new DeckModel();        // mazzo fisico + pila degli scarti
 const cardSystem   = new CardSystem(sceneManager.scene);
 
 sceneManager.scene.add(roomModel.group);
 sceneManager.scene.add(bombModel.group);
+sceneManager.scene.add(playerModel.group);
+sceneManager.scene.add(deckModel.group);
+cardSystem.setDeckModel(deckModel);
 
 // REQUIRES: Hierarchical model — PointLight rossa figlia del gruppo bomba
 sceneManager.redLight.position.set(0, 0.1, 0);
@@ -35,16 +43,17 @@ bombModel.group.add(sceneManager.redLight);
 bombModel.redLight = sceneManager.redLight;   // esposta per le animazioni della bomba
 
 // ── Bootstrap: sistemi e UI ───────────────────────────────────────────────────
+const audio     = new AudioManager();
 const effects   = new Effects(sceneManager.camera);
 const particles = new Particles(sceneManager.scene);
-const hud       = new HUD();
+const hud       = new HUD(audio);
 
 const gameManager = new GameManager({
-  hud, effects, particles,
+  hud, audio, effects, particles,
   sceneManager, cardSystem, bombModel,
 });
 
-// Mano iniziale: 8 carte a ventaglio sul banco
+// Mano iniziale: 8 carte volano dal mazzo fisico sul banco
 cardSystem.deal(8);
 hud.setDeckCount(cardSystem.deckCount);
 
@@ -52,15 +61,15 @@ hud.setDeckCount(cardSystem.deckCount);
 const inputManager = new InputManager({
   camera: sceneManager.camera,
   renderer: sceneManager.renderer,
-  cardSystem, gameManager, sceneManager, hud, particles,
+  cardSystem, gameManager, sceneManager, audio, hud, particles,
 });
 gameManager.attachInput(inputManager);
 
 // Esposto globalmente per debug e per i trigger dei modelli (BombModel → effects)
 window.App = {
-  sceneManager, roomModel, bombModel,
+  sceneManager, roomModel, bombModel, playerModel, deckModel,
   cardSystem, gameManager, inputManager,
-  effects, particles, hud,
+  audio, effects, particles, hud,
 };
 
 // ── Animation Loop ────────────────────────────────────────────────────────────
@@ -78,6 +87,8 @@ function animate(time) {
   sceneManager.update(time);
   roomModel.update(t);
   bombModel.update(t);
+  playerModel.update(t);
+  deckModel.update(t);
   particles.update(dt);
 
   // Camera shake: offset applicato SOLO durante il render (niente deriva Orbit)

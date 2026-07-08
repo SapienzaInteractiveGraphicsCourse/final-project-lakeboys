@@ -5,19 +5,20 @@
 //
 // Scorciatoie tastiera:
 //   1–8 seleziona/deseleziona la carta · INVIO gioca · X scarta
-//   S ordina la mano · H suggerimento
+//   S ordina la mano · H suggerimento · V cambia visuale · M audio on/off
 
 import * as THREE from 'three';
 import { Tween, Easing } from '@tweenjs/tween.js';
 import { BOMB_POS } from '../scene/config.js';
 
 export class InputManager {
-  constructor({ camera, renderer, cardSystem, gameManager, sceneManager, hud, particles }) {
+  constructor({ camera, renderer, cardSystem, gameManager, sceneManager, audio, hud, particles }) {
     this.camera       = camera;
     this.renderer     = renderer;
     this.cardSystem   = cardSystem;
     this.gameManager  = gameManager;
     this.sceneManager = sceneManager;   // per abilitare/disabilitare OrbitControls
+    this.audio        = audio;
     this.hud          = hud;
     this.particles    = particles;      // scintille sugli impatti delle carte
 
@@ -55,6 +56,10 @@ export class InputManager {
       ?.addEventListener('click', () => this._onSort());
     document.getElementById('btn-hint')
       ?.addEventListener('click', () => this._onHint());
+    document.getElementById('btn-mute')
+      ?.addEventListener('click', () => this._onToggleMute());
+    document.getElementById('btn-view')
+      ?.addEventListener('click', () => this._onToggleView());
 
     window.addEventListener('keydown', e => this._onKeyDown(e));
   }
@@ -73,6 +78,8 @@ export class InputManager {
     else if (key === 'x') this._onDiscard();
     else if (key === 's') this._onSort();
     else if (key === 'h') this._onHint();
+    else if (key === 'v') this._onToggleView();
+    else if (key === 'm') this._onToggleMute();
   }
 
   // ── Azioni ausiliarie ─────────────────────────────────────────────────────
@@ -81,6 +88,7 @@ export class InputManager {
     if (this.gameManager.phase !== 'player' || this.gameManager.isOver) return;
     const mode = this.cardSystem.toggleSort();
     this.hud.setSortLabel(mode);
+    this.audio.cardDraw();
   }
 
   // Aiuto: seleziona automaticamente la miglior mano possibile
@@ -91,7 +99,18 @@ export class InputManager {
 
     [...this.selectedCards].forEach(c => this._deselect(c));
     cards.forEach(c => this._select(c));
+    this.audio.cardSelect();
     this.gameManager.showPotentialVoltage(this.selectedCards);
+  }
+
+  _onToggleMute() {
+    const muted = this.audio.toggleMuted();
+    this.hud.setMuteLabel(muted);
+  }
+
+  _onToggleView() {
+    const view = this.sceneManager.toggleCameraView();
+    this.hud.setViewLabel(view);
   }
 
   // ── Raycaster utils ──────────────────────────────────────────────────────
@@ -259,9 +278,11 @@ export class InputManager {
 
     if (card.isSelected) {
       this._deselect(card);
+      this.audio.cardDeselect();
     } else {
       if (this.selectedCards.length >= 5) return;
       this._select(card);
+      this.audio.cardSelect();
     }
 
     this.gameManager.showPotentialVoltage(this.selectedCards);
@@ -348,6 +369,7 @@ export class InputManager {
     setTimeout(() => {
       this.cardSystem.removeCards(played);
       this.cardSystem.drawToFull();
+      this.audio.cardDraw();
       this.gameManager.playPlayerHand(score);
     }, launchStart + n * 70 + 430);
   }
@@ -360,6 +382,7 @@ export class InputManager {
     if (this.selectedCards.length === 0 || this.gameManager.discardsLeft <= 0) return;
 
     this.hud.setActions({});   // disabilita tutto durante l'animazione
+    this.audio.discard();
 
     const tossed = [...this.selectedCards];
     this.selectedCards = [];
@@ -375,6 +398,7 @@ export class InputManager {
     setTimeout(() => {
       this.cardSystem.removeCards(tossed);
       this.cardSystem.drawToFull();
+      this.audio.cardDraw();
       // Reset preview + riabilita i pulsanti in base alla nuova selezione (vuota)
       this.gameManager.showPotentialVoltage(this.selectedCards);
     }, tossed.length * 60 + 360);
@@ -397,6 +421,7 @@ export class InputManager {
       .to({ x: 1.15, y: 1.15, z: 1.15 }, 260)
       .easing(Easing.Back.Out)
       .start();
+    this.audio.scoreTick(i);
   }
 
   // FASE 2 — la carta parte in vite verso la bomba e si converte in energia
@@ -422,20 +447,18 @@ export class InputManager {
       .start();
   }
 
-  // Carta scartata: vola oltre il bordo destro del banco rimpicciolendosi
+  // Carta scartata: vola sulla pila degli scarti e vi atterra a faccia in giù
   _animateDiscardCard(card) {
     this._stopTweens(card.group);
+    const target = this.cardSystem.deckModel?.getDiscardTopPosition()
+      ?? new THREE.Vector3(5.05, -0.4, 3.4);
 
     new Tween(card.group.position)
-      .to({ x: 8.5, y: 0.2, z: 3.2 }, 320)
+      .to({ x: target.x, y: target.y, z: target.z }, 320)
       .easing(Easing.Quadratic.In)
       .start();
     new Tween(card.group.rotation)
       .to({ x: Math.PI / 2, y: (Math.random() - 0.5) * 0.6, z: 0 }, 320)
-      .easing(Easing.Quadratic.In)
-      .start();
-    new Tween(card.group.scale)
-      .to({ x: 0.05, y: 0.05, z: 0.05 }, 320)
       .easing(Easing.Quadratic.In)
       .start();
   }

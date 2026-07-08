@@ -23,9 +23,21 @@ export class CardSystem {
     this.deck       = this._generateDeck();
     this.discardPile = [];              // dati carta scartati/giocati (per il reshuffle)
     this.sortMode   = 'value';          // 'value' | 'suit' — ordinamento del ventaglio
+    this.deckModel  = null;             // mazzo 3D sul banco (assegnato da main.js)
   }
 
   get deckCount() { return this.deck.length; }
+
+  setDeckModel(deckModel) {
+    this.deckModel = deckModel;
+    this._syncDeckVisual();
+  }
+
+  // Allinea le pile 3D (mazzo + scarti) ai conteggi reali
+  _syncDeckVisual() {
+    this.deckModel?.setCount(this.deck.length);
+    this.deckModel?.setDiscardCount(this.discardPile.length);
+  }
 
   // ── Ordinamento della mano ──────────────────────────────────────────────────
   // 'value': decrescente per valore. 'suit': raggruppa per seme, poi per valore.
@@ -73,6 +85,9 @@ export class CardSystem {
         this.deck = this._shuffle(this.discardPile);
         this.discardPile = [];
         if (this.deck.length === 0) this.deck = this._generateDeck();
+        // La pila degli scarti torna nel mazzo: animazione + suono di riffle
+        this.deckModel?.shuffle();
+        window.App?.audio?.shuffle?.();
       }
       out.push(this.deck.shift());
     }
@@ -85,6 +100,7 @@ export class CardSystem {
     this._drawData(count).forEach(data => this._spawnHandCard(data));
     this._sortHand();
     this._arrangeFan();
+    this._syncDeckVisual();
     return this.hand;
   }
 
@@ -94,6 +110,7 @@ export class CardSystem {
     if (need > 0) this._drawData(need).forEach(data => this._spawnHandCard(data));
     this._sortHand();
     this._arrangeFan();
+    this._syncDeckVisual();
     return this.hand;
   }
 
@@ -112,6 +129,7 @@ export class CardSystem {
       this.hand = this.hand.filter(c => c !== card);
     });
     this._arrangeFan();
+    this._syncDeckVisual();
   }
 
   // ── Layout a ventaglio (giocatore) ──────────────────────────────────────────
@@ -151,15 +169,15 @@ export class CardSystem {
         new Tween(card.group.position).to(visualPos, 260).easing(Easing.Cubic.Out).start();
         new Tween(card.group.rotation).to(visualRot, 260).easing(Easing.Cubic.Out).start();
       } else {
-        // Prima comparsa: la carta parte SDRAIATA A FACCIA IN GIÙ dall'angolo
-        // del banco e vola in mano girandosi (flip di rivelazione).
-        const start = new THREE.Vector3(6.5, 3.0, 2.0);
+        // Prima comparsa: la carta parte SDRAIATA A FACCIA IN GIÙ in cima al
+        // mazzo fisico e vola in mano girandosi (flip di rivelazione).
+        const start = this.deckModel?.getTopWorldPosition() ?? new THREE.Vector3(6.5, 3.0, 2.0);
         const delay = drawIndex * 70;   // pescate una alla volta, non in blocco
         drawIndex += 1;
 
         card.group.position.copy(start);
         card.group.scale.setScalar(0.95);
-        // rotation.x = +90°: piatta col fronte verso il tavolo
+        // rotation.x = +90°: piatta sul mazzo col fronte verso il tavolo
         card.group.rotation.set(Math.PI / 2, targetRot.y, 0);
 
         new Tween(card.group.position)

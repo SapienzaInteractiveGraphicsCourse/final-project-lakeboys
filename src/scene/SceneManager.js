@@ -6,8 +6,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { getWoodMaps } from './TextureFactory.js';
 import {
-  BOMB_POS, FLOOR_Y, CEIL_Y, TABLE_TOP_Y, ROOM_BACK_Z,
+  BOMB_POS, FLOOR_Y, CEIL_Y, TABLE_TOP_Y, ROOM_BACK_Z, PLAYER_EYE,
 } from './config.js';
+
+// Preset di inquadratura: terza persona (panoramica) e prima persona (occhi dell'artificiere)
+const CAMERA_VIEWS = {
+  third: { pos: new THREE.Vector3(0, 5.0, 12.4), target: new THREE.Vector3(0, 0.7, -2.0) },
+  first: { pos: PLAYER_EYE.clone(),              target: new THREE.Vector3(0, -0.45, -3.0) },
+};
 
 export class SceneManager {
   constructor() {
@@ -85,8 +91,10 @@ export class SceneManager {
       0.1,
       80
     );
-    this.camera.position.set(0, 5.0, 12.4);
-    this.camera.lookAt(new THREE.Vector3(0, 0.7, -2.0));
+    // Inquadratura iniziale: terza persona (vedi l'artificiere di spalle)
+    this.cameraView = 'third';
+    this.camera.position.copy(CAMERA_VIEWS.third.pos);
+    this.camera.lookAt(CAMERA_VIEWS.third.target);
   }
 
   // ── Scene base ──────────────────────────────────────────────────────────────
@@ -394,10 +402,34 @@ export class SceneManager {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping  = true;
     this.controls.dampingFactor  = 0.08;
-    this.controls.target.set(0, 0.7, -2.0);
+    this.controls.target.copy(CAMERA_VIEWS.third.target);
     this.controls.minDistance    = 4;
     this.controls.maxDistance    = 28;
     this.controls.maxPolarAngle  = Math.PI / 2.05;
+  }
+
+  // ── API: cambio inquadratura (prima ⇄ terza persona) ────────────────────────
+  // Interpolazione manuale nel render loop (vedi update()): durante la transizione
+  // sospendiamo OrbitControls — altrimenti riposizionerebbe la camera ogni frame
+  // annullando il movimento. A fine transizione OrbitControls riprende dal nuovo
+  // punto, così puoi comunque ruotare la visuale.
+  setCameraView(view) {
+    const preset = CAMERA_VIEWS[view] || CAMERA_VIEWS.third;
+    this.cameraView = view;
+    this.controls.minDistance = view === 'first' ? 1.2 : 4;
+    this._camAnim = {
+      fromPos: this.camera.position.clone(),
+      toPos:   preset.pos.clone(),
+      fromTgt: this.controls.target.clone(),
+      toTgt:   preset.target.clone(),
+      start:   performance.now(),
+      dur:     750,   // ms — progresso calcolato dal tempo reale (frame-rate independent)
+    };
+    return view;
+  }
+
+  toggleCameraView() {
+    return this.setCameraView(this.cameraView === 'third' ? 'first' : 'third');
   }
 
   // ── Resize handler ──────────────────────────────────────────────────────────
@@ -452,7 +484,21 @@ export class SceneManager {
       this.dust.position.y = Math.sin(t * 0.3) * 0.25;
     }
 
-    this.controls.update();
+    // Transizione di inquadratura (prima ⇄ terza persona): interpolazione manuale,
+    // basata sul TEMPO REALE (non sul dt per frame) così resta corretta anche se
+    // il browser limita i frame. Mentre è attiva, OrbitControls resta sospeso per
+    // non annullare il movimento; al termine riprende dal nuovo punto.
+    if (this._camAnim) {
+      const a = this._camAnim;
+      const k = Math.min((performance.now() - a.start) / a.dur, 1);
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;   // easeInOutQuad
+      this.camera.position.lerpVectors(a.fromPos, a.toPos, e);
+      this.controls.target.lerpVectors(a.fromTgt, a.toTgt, e);
+      this.camera.lookAt(this.controls.target);
+      if (k >= 1) this._camAnim = null;
+    } else {
+      this.controls.update();
+    }
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────

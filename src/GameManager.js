@@ -9,6 +9,7 @@
 //   core/GameState   → stato e regole (puro)
 //   core/combos      → valutazione delle mani (puro)
 //   ui/HUD           → tutto il DOM
+//   systems/Audio    → effetti sonori procedurali
 //   systems/Effects  → camera shake e flash
 //   systems/Particles→ burst di scintille (THREE.Points)
 //   scene/*          → resa 3D (reazioni della bomba)
@@ -18,8 +19,9 @@ import { scoreHand, bestHand } from './core/combos.js';
 import { GameState, GamePhase, RULES } from './core/GameState.js';
 
 export class GameManager {
-  constructor({ hud, effects, particles, sceneManager, cardSystem, bombModel }) {
+  constructor({ hud, audio, effects, particles, sceneManager, cardSystem, bombModel }) {
     this.hud       = hud;
+    this.audio     = audio;
     this.effects   = effects;
     this.particles = particles;
     this.scene     = sceneManager;
@@ -65,6 +67,7 @@ export class GameManager {
   async playPlayerHand(score) {
     if (this.state.isOver || this.state.phase !== GamePhase.PLAYER) return;
 
+    this.audio.playHand(score.mult);
     this.hud.setDeckCount(this.cards.deckCount);
 
     // Reveal stile Balatro: chips × mult contano, poi slam del totale
@@ -77,6 +80,7 @@ export class GameManager {
     // Moduli della bomba: ogni 25% di progresso se ne apre uno fisicamente
     const stages = this.bombModel?.setDefuseProgress?.(this.state.defuseProgress) ?? [];
     if (stages.length && !won) {
+      this.audio.stageDefused();
       this.hud.setStatus(`✓ Modulo ${stages[stages.length - 1]}/3 della bomba disinnescato`, '#a4c46a');
       this.particles.burst({
         position: this._bombTopPosition(), color: 0x66ffaa,
@@ -125,6 +129,7 @@ export class GameManager {
     this.hud.setStatus('✓ BOMBA DISINNESCATA', '#a4c46a');
     this.hud.setTurnBanner('◆ HAI VINTO', '#a4c46a');
     this.effects.flash('#a4c46a', 0.5);
+    this.audio.victory();
     this.particles.burst({
       position: this._bombTopPosition(), color: 0x66ffaa,
       count: 60, speed: 4, life: 1100, gravity: 3,
