@@ -1,7 +1,7 @@
 // DEFUSE-DECK 3D — PlayerModel : "L'ARTIFICIERE"
 //
 // Il personaggio del giocatore: un artificiere in tuta antibomba seduto al lato
-// vicino del tavolo, chino sulle carte e rivolto verso la bomba.
+// vicino del tavolo, chino sulle carte e rivolto verso la bomba e il Warden.
 // In terza persona lo vedi di spalle (sopra la spalla); in prima persona la
 // camera si pone all'altezza dei suoi occhi.
 //
@@ -29,7 +29,7 @@ export class PlayerModel {
     this.group.name = 'Operator';
     this.group.position.copy(PLAYER_POS);
     this.group.scale.setScalar(0.92);
-    // Rivolto verso la bomba (−z): chest plate, visiera e faro sono sul
+    // Rivolto verso la bomba/Warden (−z): chest plate, visiera e faro sono sul
     // lato +z locale; rotation.y = π li porta a guardare −z (la bomba). In terza
     // persona vediamo quindi la sua schiena (zaino EOD).
     this.group.rotation.y = Math.PI;

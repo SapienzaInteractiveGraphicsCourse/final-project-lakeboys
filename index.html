@@ -13,6 +13,7 @@
 </head>
 <body>
   <div id="flash"></div>
+  <div id="danger-vignette"></div>
 
   <div id="hud">
     <!-- Barra del GIOCATORE -->
@@ -22,9 +23,18 @@
       <div class="bar-wrap"><div id="defuse-bar-fill" class="bar-fill"></div></div>
     </div>
 
+    <!-- Barra del WARDEN -->
+    <div id="warden-panel" class="panel">
+      <div class="panel-label">Warden · Sovraccarico</div>
+      <div id="overcharge-value" class="meter-value">0 / 1600</div>
+      <div class="bar-wrap"><div id="overcharge-bar-fill" class="bar-fill"></div></div>
+      <div id="threat-value">Minaccia ×1.00</div>
+      <div id="enemy-readout"></div>
+    </div>
+
     <!-- Turno / stato -->
     <div id="turn-indicator">► TUO TURNO</div>
-    <div id="status-label">■ Sistema attivo — forma mani di poker e carica il disinnesco</div>
+    <div id="status-label">■ Sistema attivo — disinnesca prima che il Warden detoni</div>
     <div id="top-buttons">
       <button id="btn-view" class="btn small">👁 3ª Persona</button>
       <button id="btn-mute" class="btn small">🔊 Audio</button>
@@ -70,6 +80,35 @@
 
   <!-- Schermata di fine partita (popolata da ui/HUD.js) -->
   <div id="end-overlay"></div>
+
+  <!-- ── Tutorial iniziale ── -->
+  <div id="tutorial">
+    <div class="card">
+      <h1>DEFUSE-DECK</h1>
+      <div class="sub">Duello di carte contro il Warden</div>
+      <ul>
+        <li><span class="ic">🎯</span><span>Carica la barra <b>DISINNESCO</b> fino a <span class="accent">1400</span> per disarmare la bomba e <b>vincere</b>.</span></li>
+        <li class="warn"><span class="ic">💀</span><span>Il <b>Warden gioca le sue carte</b> dopo di te e carica il <b>SOVRACCARICO</b>: se arriva a 1600, la bomba <b>esplode</b>. E ad ogni turno diventa <b>più aggressivo</b>.</span></li>
+        <li><span class="ic">🃏</span><span>Hai 8 carte. <b>Clicca</b> da 1 a 5 carte per formare una mano di poker: vale <span class="accent">chips × mult</span>.</span></li>
+        <li><span class="ic">♻</span><span>Premi <b>Scarta</b> per cambiare le carte selezionate (3 scarti per turno) e cercare combo migliori.</span></li>
+        <li><span class="ic">💡</span><span>In difficoltà? <b>Aiuto</b> seleziona la miglior mano possibile (2 usi per partita).</span></li>
+        <li><span class="ic">🖱️</span><span>Trascina col mouse per <b>ruotare la visuale</b>; trascina una carta per ispezionarla.</span></li>
+      </ul>
+      <div id="difficulty-row">
+        <span class="diff-label">Difficoltà</span>
+        <div class="diff-buttons">
+          <button class="diff-btn" data-diff="recruit">Recluta</button>
+          <button class="diff-btn active" data-diff="standard">Artificiere</button>
+          <button class="diff-btn" data-diff="veteran">Veterano</button>
+        </div>
+      </div>
+      <div class="keys">
+        <kbd>1</kbd>–<kbd>8</kbd> seleziona carta &nbsp;·&nbsp; <kbd>Invio</kbd> gioca &nbsp;·&nbsp; <kbd>X</kbd> scarta &nbsp;·&nbsp; <kbd>S</kbd> ordina<br />
+        <kbd>H</kbd> aiuto &nbsp;·&nbsp; <kbd>V</kbd> visuale &nbsp;·&nbsp; <kbd>M</kbd> audio
+      </div>
+      <button id="btn-start">⚡ Inizia</button>
+    </div>
+  </div>
 
   <!--
     Import Map: mappa gli identificatori di modulo ai loro URL CDN.

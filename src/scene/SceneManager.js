@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { getWoodMaps } from './TextureFactory.js';
 import {
-  BOMB_POS, FLOOR_Y, CEIL_Y, TABLE_TOP_Y, ROOM_BACK_Z, PLAYER_EYE,
+  BOMB_POS, FLOOR_Y, CEIL_Y, ENEMY_POS, TABLE_TOP_Y, ROOM_BACK_Z, PLAYER_EYE,
 } from './config.js';
 
 // Preset di inquadratura: terza persona (panoramica) e prima persona (occhi dell'artificiere)
@@ -24,7 +24,7 @@ export class SceneManager {
 
     // Lights — kept as instance properties so other modules can modify them
     this.spotLight    = null;  // Bedside lamp spotlight (now hangs above the bomb)
-    this.redLight     = null;  // Bomb warning light (parented to bomb in main.js)
+    this.redLight     = null;  // Bomb warning light (parented to bomb in Phase 2)
     this.ambientLight = null;
     this.controls     = null;
 
@@ -37,13 +37,14 @@ export class SceneManager {
     this._voltageProgress = 0;
     this._redPulse        = 0;   // picco transitorio della luce rossa quando la bomba è colpita
 
-    // Faretto drammatico dedicato
+    // Faretti drammatici dedicati
     this.bombSpot  = null;
+    this.enemySpot = null;
 
     // Pulviscolo atmosferico (THREE.Points)
     this.dust = null;
 
-    // Table mesh — legno procedurale (TextureFactory)
+    // Table mesh — texture applied in Phase 6
     this.table = null;
 
     this._initRenderer();
@@ -101,15 +102,16 @@ export class SceneManager {
 
   _initScene() {
     this.scene.background = new THREE.Color(0x05060a);
-    // Fog leggera: dà profondità al bunker senza nascondere la bomba
+    // Fog leggera: dà profondità al bunker senza nascondere bomba e nemico
     this.scene.fog = new THREE.FogExp2(0x06070c, 0.026);
 
     // REQUIRES: Texture — environment map PROCEDURALE (PMREM da RoomEnvironment,
     // scena generata via codice: nessuna immagine importata). Dà riflessi
-    // realistici a scocca della bomba e cornici metalliche delle carte.
+    // realistici a visiera, scocca della bomba e cornici metalliche delle carte.
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     // MOLTO sottile: solo un filo di riflesso sui metalli, il bunker resta buio
+    // (calibrato dal vivo: 0.06 lavava già l'atmosfera)
     this.scene.environmentIntensity = 0.015;
     pmrem.dispose();
   }
@@ -143,19 +145,30 @@ export class SceneManager {
     this.bombSpot.target.position.set(BOMB_POS.x, FLOOR_Y + 2.4, BOMB_POS.z);
     this.scene.add(this.bombSpot, this.bombSpot.target);
 
-    // 3. Red PointLight — bomb warning indicator (riposizionata nella scocca in main.js)
+    // 3. Faretto chiave FRONTALE sul NEMICO (centrato in scena → ben illuminato)
+    this.enemySpot = new THREE.SpotLight(0xdfe9ff, 240, 28, Math.PI / 6, 0.5, 2);
+    this.enemySpot.position.set(ENEMY_POS.x, ENEMY_POS.y + 3.5, ENEMY_POS.z + 6.5);
+    this.enemySpot.target.position.set(ENEMY_POS.x, ENEMY_POS.y, ENEMY_POS.z);
+    this.scene.add(this.enemySpot, this.enemySpot.target);
+
+    // Fill frontale ravvicinato: schiarisce faccia e corpo verso la camera
+    this.enemyFill = new THREE.PointLight(0xc4d6ff, 45, 14, 2);
+    this.enemyFill.position.set(ENEMY_POS.x, ENEMY_POS.y + 0.4, ENEMY_POS.z + 3.4);
+    this.scene.add(this.enemyFill);
+
+    // 4. Red PointLight — bomb warning indicator (riposizionata nella scocca in main.js)
     //    distance ampia perché la bomba è enorme
     this.redLight = new THREE.PointLight(0xff2200, 1.2, 14, 2);
     this.redLight.position.set(0, 0.8, 0);
     this.scene.add(this.redLight);
 
-    // 4. Ambient — schiarisce leggermente tutta la scena
+    // 5. Ambient — leggermente più alto per compensare i fill rimossi (PERF)
     this.ambientLight = new THREE.AmbientLight(0x1a1f2e, 2.3);
     this.scene.add(this.ambientLight);
   }
 
   // ── Table ───────────────────────────────────────────────────────────────────
-  // REQUIRES: Surface to receive shadows — wood texture + Normal Map
+  // REQUIRES: Surface to receive shadows — wood texture + Normal Map applied in Phase 6
 
   _initTable() {
     const topGeom = new THREE.BoxGeometry(14, 0.18, 9);
@@ -193,11 +206,12 @@ export class SceneManager {
 
   // ── Bedside Lamp ────────────────────────────────────────────────────────────
   // REQUIRES: Hierarchical model — Lamp (Group) → cord, cap, shade, bulb
+  // La lampada è sospesa direttamente sopra la bomba.
 
   _initBedsideLamp() {
     const g = new THREE.Group();
     g.name = 'BedsideLamp';
-    g.position.set(3.2, 0, 2.8);  // spostata di lato rispetto al centro scena
+    g.position.set(3.2, 0, 2.8);  // spostata di lato: lascia libero il nemico al centro
     this.lampGroup = g;
 
     // Cord: dal soffitto (y=CEIL_Y) fino alla cima del paralume (y=4.1)
@@ -340,7 +354,7 @@ export class SceneManager {
     this._voltageProgress = Math.max(0, Math.min(1, progress || 0));
   }
 
-  // ── API: picco transitorio della luce rossa (bomba colpita) ─────────────────
+  // ── API: picco transitorio della luce rossa (bomba colpita dal Warden) ──────
   pulseRedLight(boost = 3) {
     this._redPulse = Math.max(this._redPulse, boost);
   }
@@ -349,9 +363,11 @@ export class SceneManager {
 
   _initAtmosphere() {
     // PERF: ogni PointLight pesa su OGNI fragment della scena (renderer forward).
-    // Meglio poche luci chiave che tanti fill.
+    // Ho consolidato i numerosi fill in poche luci chiave; i fill rimossi
+    // (console glow verde, rim blu, due laterali carte) sono compensati
+    // dall'ambient più alto e dalla cardLight rinforzata qui sotto.
 
-    // Warm fill per l'area carte
+    // Warm fill per l'area carte — assorbe anche i due laterali rimossi
     this.cardLight = new THREE.PointLight(0xffe8cc, 26, 9, 2);
     this.cardLight.position.set(0, 3.0, 5.0);
     this.scene.add(this.cardLight);

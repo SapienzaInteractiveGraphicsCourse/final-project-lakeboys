@@ -1,8 +1,8 @@
 // DEFUSE-DECK 3D — Config / Layout
 //
 // Single source of truth per le coordinate della scena.
-// Spostando la bomba, lampada, faretti e cavi seguono automaticamente
-// perché tutti leggono da qui (niente valori sparsi).
+// Spostando la bomba o il nemico, lampada, faretti e cavi seguono
+// automaticamente perché tutti leggono da qui (niente valori sparsi).
 
 import * as THREE from 'three';
 
@@ -25,10 +25,13 @@ export const BOMB_SCALE = 2.8;
 // y viene calcolata da BombModel per appoggiare il fondo sul pavimento.
 export const BOMB_POS = new THREE.Vector3(-8.8, 0, -4.6);
 
+// ── Nemico "THE WARDEN" (sospeso, centrato dietro l'area di gioco) ──────────
+export const ENEMY_POS = new THREE.Vector3(0, 2.4, -5.0);
+
 // ── Giocatore "L'ARTIFICIERE" (seduto al lato vicino del tavolo) ────────────
 // Origine del busto: appena oltre il bordo del tavolo, chino e rivolto alla bomba.
 // y basso → in terza persona lo guardi "sopra la spalla", senza coprire le carte.
 export const PLAYER_POS = new THREE.Vector3(0, -1.15, 5.7);
 // Posizione "occhi" usata dalla camera in prima persona (davanti alla testa,
-// inquadra il ventaglio in basso e la bomba di fronte).
+// inquadra il ventaglio in basso e il Warden di fronte).
 export const PLAYER_EYE = new THREE.Vector3(0, 1.55, 5.1);

@@ -68,6 +68,9 @@ export class InputManager {
 
   _onKeyDown(event) {
     if (event.repeat) return;
+    // Non intercettare i tasti mentre il tutorial è aperto
+    const tutorial = document.getElementById('tutorial');
+    if (tutorial && !tutorial.classList.contains('hidden')) return;
 
     const key = event.key.toLowerCase();
     if (event.key >= '1' && event.key <= '8') {

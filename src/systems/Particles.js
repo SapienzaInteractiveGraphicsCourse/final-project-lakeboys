@@ -1,7 +1,7 @@
 // DEFUSE-DECK 3D — systems/Particles
 //
 // Burst di particelle PROCEDURALI con THREE.Points: scintille per gli impatti
-// delle carte sulla bomba, energia verde per i moduli disinnescati.
+// del Warden, energia verde per i moduli disinnescati.
 //
 // REQUIRES: Procedural animation — posizioni e velocità integrate via codice
 //           ogni frame (update); nessun sistema particellare importato.

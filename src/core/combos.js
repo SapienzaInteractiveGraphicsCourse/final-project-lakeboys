@@ -1,8 +1,8 @@
 // DEFUSE-DECK 3D — combos.js
 //
 // Single source of truth per la valutazione delle mani (stile Balatro).
-// Usato dal GameManager per il punteggio e per il suggerimento della
-// miglior mano.
+// Usato sia dal giocatore (GameManager) sia dal nemico (EnemyAI), così le
+// regole di punteggio sono identiche per entrambi.
 //
 // Modello di punteggio (come Balatro):
 //   total = (baseChips_combo + Σ chips_carte) × mult_combo

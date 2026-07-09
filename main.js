@@ -2,8 +2,8 @@
 // Esame: Interactive Graphics — Three.js + tween.js, no framework UI
 //
 // Architettura (src/):
-//   core/     logica pura (stato, combo) — nessuna dipendenza da DOM/Three
-//   scene/    mondo 3D (scena, stanza, bomba, artificiere, carte)
+//   core/     logica pura (stato, combo, AI) — nessuna dipendenza da DOM/Three
+//   scene/    mondo 3D (scena, stanza, bomba, Warden, artificiere, carte)
 //   systems/  sistemi di gioco (carte 3D, input, audio, effetti di regia)
 //   ui/       HUD e overlay DOM
 //   GameManager.js orchestratore dei turni
@@ -13,6 +13,7 @@ import { update as tweenUpdate } from '@tweenjs/tween.js';
 import { SceneManager } from './src/scene/SceneManager.js';
 import { RoomModel }    from './src/scene/RoomModel.js';
 import { BombModel }    from './src/scene/BombModel.js';
+import { EnemyModel }   from './src/scene/EnemyModel.js';
 import { PlayerModel }  from './src/scene/PlayerModel.js';
 import { DeckModel }    from './src/scene/DeckModel.js';
 import { CardSystem }   from './src/systems/CardSystem.js';
@@ -20,6 +21,7 @@ import { InputManager } from './src/systems/InputManager.js';
 import { AudioManager } from './src/systems/AudioManager.js';
 import { Effects }      from './src/systems/Effects.js';
 import { Particles }    from './src/systems/Particles.js';
+import { EnemyAI }      from './src/core/EnemyAI.js';
 import { HUD }          from './src/ui/HUD.js';
 import { GameManager }  from './src/GameManager.js';
 
@@ -27,12 +29,15 @@ import { GameManager }  from './src/GameManager.js';
 const sceneManager = new SceneManager();
 const roomModel    = new RoomModel();
 const bombModel    = new BombModel();
+const enemyModel   = new EnemyModel();
 const playerModel  = new PlayerModel();      // l'artificiere (personaggio del giocatore)
 const deckModel    = new DeckModel();        // mazzo fisico + pila degli scarti
 const cardSystem   = new CardSystem(sceneManager.scene);
+const enemyAI      = new EnemyAI();          // il "cervello" che gioca le carte del Warden
 
 sceneManager.scene.add(roomModel.group);
 sceneManager.scene.add(bombModel.group);
+sceneManager.scene.add(enemyModel.group);
 sceneManager.scene.add(playerModel.group);
 sceneManager.scene.add(deckModel.group);
 cardSystem.setDeckModel(deckModel);
@@ -50,11 +55,11 @@ const hud       = new HUD(audio);
 
 const gameManager = new GameManager({
   hud, audio, effects, particles,
-  sceneManager, cardSystem, bombModel,
+  sceneManager, cardSystem, enemyAI, enemyModel, bombModel,
 });
 
-// Mano iniziale: 8 carte volano dal mazzo fisico sul banco
-cardSystem.deal(8);
+// NB: la mano iniziale viene distribuita DOPO il tutorial (GameManager.startDuel),
+// così le carte volano dal mazzo fisico sul banco.
 hud.setDeckCount(cardSystem.deckCount);
 
 // REQUIRES: THREE.Raycaster — InputManager gestisce tutta l'interazione
@@ -67,10 +72,27 @@ gameManager.attachInput(inputManager);
 
 // Esposto globalmente per debug e per i trigger dei modelli (BombModel → effects)
 window.App = {
-  sceneManager, roomModel, bombModel, playerModel, deckModel,
-  cardSystem, gameManager, inputManager,
+  sceneManager, roomModel, bombModel, enemyModel, playerModel, deckModel,
+  cardSystem, enemyAI, gameManager, inputManager,
   audio, effects, particles, hud,
 };
+
+// ── Tutorial iniziale: difficoltà + avvio ─────────────────────────────────────
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    audio.cardSelect();
+  });
+});
+
+document.getElementById('btn-start')?.addEventListener('click', () => {
+  const diffId = document.querySelector('.diff-btn.active')?.dataset.diff ?? 'standard';
+  gameManager.applyDifficulty(diffId);
+  hud.hideTutorial();
+  audio.cardDraw();
+  gameManager.startDuel();
+});
 
 // ── Animation Loop ────────────────────────────────────────────────────────────
 let lastTime = 0;
@@ -87,6 +109,7 @@ function animate(time) {
   sceneManager.update(time);
   roomModel.update(t);
   bombModel.update(t);
+  enemyModel.update(t);
   playerModel.update(t);
   deckModel.update(t);
   particles.update(dt);

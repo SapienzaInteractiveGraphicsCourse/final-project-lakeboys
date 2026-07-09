@@ -346,7 +346,7 @@ export class BombModel {
     }
   }
 
-  // ── Reazione: la bomba subisce un impatto energetico ─────────────────────────
+  // ── Reazione: la bomba viene colpita dal SOVRACCARICO del Warden ─────────────
   // Picco breve della luce rossa + micro-scossa. Generato via tween.js (no keyframe).
   pulse() {
     if (this._exploded) return;

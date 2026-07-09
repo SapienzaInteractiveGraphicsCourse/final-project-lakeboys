@@ -1,8 +1,8 @@
 // DEFUSE-DECK 3D — ui/HUD
 //
-// TUTTA la manipolazione del DOM vive qui: barra, banner di turno, preview
-// della selezione, reveal del punteggio stile Balatro, schermata di fine
-// partita e stato dei pulsanti.
+// TUTTA la manipolazione del DOM vive qui: barre, banner di turno, preview
+// della selezione, reveal del punteggio stile Balatro, readout del nemico,
+// vignetta di pericolo, schermata di fine partita e stato dei pulsanti.
 //
 // Nessuna logica di gioco: l'HUD legge il GameState e reagisce ai suoi eventi.
 
@@ -15,6 +15,10 @@ export class HUD {
     this.el = {
       defuseValue:     $('defuse-value'),
       defuseBar:       $('defuse-bar-fill'),
+      overchargeValue: $('overcharge-value'),
+      overchargeBar:   $('overcharge-bar-fill'),
+      threatValue:     $('threat-value'),
+      enemyReadout:    $('enemy-readout'),
       turnIndicator:   $('turn-indicator'),
       statusLabel:     $('status-label'),
       comboName:       $('combo-name'),
@@ -30,8 +34,10 @@ export class HUD {
       btnMute:         $('btn-mute'),
       btnView:         $('btn-view'),
       scoreReveal:     $('score-reveal'),
+      dangerVignette:  $('danger-vignette'),
       endOverlay:      $('end-overlay'),
       legend:          $('combo-legend'),
+      tutorial:        $('tutorial'),
     };
   }
 
@@ -39,6 +45,7 @@ export class HUD {
   bindState(state) {
     this.state = state;
     state.on('defuse',     () => this.updateMeters());
+    state.on('overcharge', () => this.updateMeters());
     state.on('turn',       ({ turn }) => {
       this.updateMeters();
       this.setTurnBanner(`► TUO TURNO`, '#a4c46a');
@@ -46,6 +53,7 @@ export class HUD {
     });
     state.on('discard',    () => this.updateMeters());
     state.on('suggestion', () => this.updateMeters());
+    state.on('danger',     ({ level, entered }) => this.setDanger(level, entered));
     this.updateMeters();
   }
 
@@ -54,8 +62,10 @@ export class HUD {
     const s = this.state;
     if (!s) return;
 
-    this._text(this.el.defuseValue, `${s.defuse} / ${s.rules.DEFUSE_TARGET}`);
-    if (this.el.defuseBar) this.el.defuseBar.style.width = `${s.defuseProgress * 100}%`;
+    this._text(this.el.defuseValue,     `${s.defuse} / ${s.rules.DEFUSE_TARGET}`);
+    this._text(this.el.overchargeValue, `${s.overcharge} / ${s.rules.OVERCHARGE_TARGET}`);
+    if (this.el.defuseBar)     this.el.defuseBar.style.width     = `${s.defuseProgress * 100}%`;
+    if (this.el.overchargeBar) this.el.overchargeBar.style.width = `${s.overchargeProgress * 100}%`;
 
     this._text(this.el.turnCount,    `Turno ${s.turn}`);
     this._text(this.el.discardsLeft, `♻ Scarti ${s.discardsLeft}/${s.rules.DISCARDS_PER_TURN}`);
@@ -67,6 +77,13 @@ export class HUD {
   }
 
   setDeckCount(count) { this._text(this.el.deckCount, `🂠 Mazzo ${count}`); }
+
+  setThreat(mult) {
+    if (!this.el.threatValue) return;
+    this.el.threatValue.textContent = `Minaccia ×${mult.toFixed(2)}`;
+    const hot = mult >= 1.4;
+    this.el.threatValue.classList.toggle('threat-hot', hot);
+  }
 
   // ── Banner di turno / stato ─────────────────────────────────────────────────
   setTurnBanner(text, color) {
@@ -178,9 +195,20 @@ export class HUD {
     });
   }
 
+  // ── Readout del turno nemico ────────────────────────────────────────────────
+  showEnemyResult(play) {
+    const el = this.el.enemyReadout;
+    if (!el) return;
+    const c = play.combo?.color ?? '#d95b38';
+    el.innerHTML =
+      `<div class="er-label">IL WARDEN HA CALATO</div>` +
+      `<div class="er-combo" style="color:${c}">${play.combo?.name ?? '—'}</div>` +
+      `<div class="er-damage">+${play.damage} sovraccarico</div>`;
+  }
+
   // ── Numerino "+X" che sale dalla barra ──────────────────────────────────────
   floatGain(amount, color, which) {
-    const anchor = this.el.defuseValue;
+    const anchor = which === 'defuse' ? this.el.defuseValue : this.el.overchargeValue;
     if (!anchor || amount <= 0) return;
     const fx = document.createElement('div');
     fx.className = 'gain-fx';
@@ -191,6 +219,17 @@ export class HUD {
     fx.style.top  = `${r.top}px`;
     document.body.appendChild(fx);
     setTimeout(() => fx.remove(), 1100);
+  }
+
+  // ── Vignetta di pericolo ────────────────────────────────────────────────────
+  setDanger(level, entered = false) {
+    const el = this.el.dangerVignette;
+    if (!el) return;
+    el.style.opacity = String(Math.max(0, (level - 0.45) * 1.6));
+    el.classList.toggle('critical', level >= 0.7);
+    if (entered) {
+      this.setStatus('⚠ SOVRACCARICO CRITICO — chiudi la partita in fretta', '#d95b38');
+    }
   }
 
   // ── Stato dei pulsanti d'azione ─────────────────────────────────────────────
@@ -212,33 +251,43 @@ export class HUD {
     this._text(this.el.btnView, view === 'first' ? '👁 1ª Persona' : '👁 3ª Persona');
   }
 
+  hideTutorial() {
+    this.el.tutorial?.classList.add('hidden');
+  }
+
   // ── Schermata di fine partita ───────────────────────────────────────────────
-  showEndScreen({ won, stats, turn }) {
+  showEndScreen({ won, stats, turn, difficultyName = null }) {
     const el = this.el.endOverlay;
     if (!el) return;
 
     const title = won ? '◆ BOMBA DISINNESCATA ◆' : '✖ DETONAZIONE ✖';
     const sub   = won
-      ? 'Hai riempito la barra di disinnesco.'
-      : 'La bomba è detonata.';
+      ? 'Hai riempito la barra di disinnesco prima del Warden.'
+      : 'Il sovraccarico del Warden ha fatto detonare la bomba.';
+
+    const extraRows =
+      (difficultyName ? `<div class="stat"><span class="stat-label">Difficoltà</span><span class="stat-value">${difficultyName}</span></div>` : '');
 
     el.innerHTML = `
       <div class="end-card ${won ? 'won' : 'lost'}">
         <h1>${title}</h1>
         <div class="end-sub">${sub}</div>
         <div class="end-stats">
+          ${extraRows}
           <div class="stat"><span class="stat-label">Turni</span><span class="stat-value">${turn}</span></div>
           <div class="stat"><span class="stat-label">Mani giocate</span><span class="stat-value">${stats.handsPlayed}</span></div>
           <div class="stat"><span class="stat-label">Miglior mano</span><span class="stat-value">${stats.bestHandName ?? '—'} · ${stats.bestHandTotal} V</span></div>
+          <div class="stat"><span class="stat-label">Colpo max subìto</span><span class="stat-value">${stats.maxEnemyHit} V</span></div>
           <div class="stat"><span class="stat-label">Scarti usati</span><span class="stat-value">${stats.discardsUsed}</span></div>
         </div>
         <button id="btn-restart" class="btn">↻ Nuova Partita</button>
       </div>`;
 
-    setTimeout(() => el.classList.add('visible'), 900);
+    // Lascia vedere l'animazione 3D (esplosione / spegnimento del Warden)
+    setTimeout(() => el.classList.add('visible'), won ? 1400 : 2100);
 
     el.querySelector('#btn-restart')?.addEventListener('click', () => {
-      // Il reload è il restart più pulito
+      // Le animazioni della bomba sono irreversibili: il reload è il restart più pulito
       window.location.reload();
     });
   }
