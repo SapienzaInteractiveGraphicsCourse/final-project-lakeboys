@@ -38,7 +38,62 @@ export class HUD {
       endOverlay:      $('end-overlay'),
       legend:          $('combo-legend'),
       tutorial:        $('tutorial'),
+      jokerInfo:       $('joker-info'),
+      jokerTooltip:    $('joker-tooltip'),
     };
+
+    this._tooltipDef = null;   // def del joker attualmente nel tooltip
+  }
+
+  // ── Tooltip joker (fase di scelta): segue il cursore ────────────────────────
+  // def = definizione da core/jokers.js (name, desc, color) · x/y = cursore.
+  // Con def null il tooltip scompare.
+  showJokerTooltip(def, x, y) {
+    const el = this.el.jokerTooltip;
+    if (!el) return;
+
+    if (!def) {
+      this._tooltipDef = null;
+      el.classList.remove('visible');
+      return;
+    }
+
+    // Ricostruisci il contenuto solo quando cambia joker (non a ogni mousemove)
+    if (this._tooltipDef !== def) {
+      this._tooltipDef = def;
+      const css = '#' + def.color.toString(16).padStart(6, '0');
+      el.innerHTML =
+        `<div class="jt-label">Joker</div>` +
+        `<div class="jt-name" style="color:${css}">${def.name}</div>` +
+        `<div class="jt-desc">${def.desc}</div>` +
+        `<div class="jt-hint">Clicca per equipaggiarlo</div>`;
+      el.style.borderLeftColor = css;
+    }
+
+    // Posiziona accanto al cursore, senza uscire dallo schermo
+    const OFFSET = 18;
+    const rect = el.getBoundingClientRect();
+    let left = x + OFFSET;
+    let top  = y + OFFSET;
+    if (left + rect.width  > window.innerWidth  - 8) left = x - rect.width  - OFFSET;
+    if (top  + rect.height > window.innerHeight - 8) top  = y - rect.height - OFFSET;
+    el.style.left = `${left}px`;
+    el.style.top  = `${top}px`;
+
+    el.classList.add('visible');
+  }
+
+  // ── Joker attivo (pannello sotto la barra del giocatore) ────────────────────
+  setJoker(def) {
+    const el = this.el.jokerInfo;
+    if (!el || !def) return;
+    const css = '#' + def.color.toString(16).padStart(6, '0');
+    el.innerHTML =
+      `<div class="jk-label">Joker attivo</div>` +
+      `<div class="jk-name" style="color:${css}">${def.name}</div>` +
+      `<div class="jk-desc">${def.desc}</div>`;
+    el.style.borderColor = css + '55';
+    el.classList.add('visible');
   }
 
   // Aggancia gli eventi del GameState: l'HUD si aggiorna da solo
@@ -152,6 +207,11 @@ export class HUD {
 
     return new Promise(resolve => {
       const color = score.combo?.color ?? '#e5ae32';
+      // Eventuali bonus dei joker (core/jokers.js → applyJokers)
+      const notes = (score.jokerNotes ?? []).map(n => {
+        const css = '#' + n.color.toString(16).padStart(6, '0');
+        return `<span style="color:${css}">◆ ${n.text}</span>`;
+      }).join(' · ');
 
       el.innerHTML =
         `<div class="sr-combo" style="color:${color}">${score.combo?.name ?? ''}</div>` +
@@ -159,7 +219,8 @@ export class HUD {
           `<span class="sr-chips">0</span><span class="sr-x">×</span>` +
           `<span class="sr-mult">0</span><span class="sr-eq">=</span>` +
           `<span class="sr-total" style="color:${color}"></span>` +
-        `</div>`;
+        `</div>` +
+        (notes ? `<div class="sr-jokers">${notes}</div>` : '');
       el.classList.add('visible');
 
       const chipsEl = el.querySelector('.sr-chips');
@@ -256,7 +317,7 @@ export class HUD {
   }
 
   // ── Schermata di fine partita ───────────────────────────────────────────────
-  showEndScreen({ won, stats, turn, difficultyName = null }) {
+  showEndScreen({ won, stats, turn, difficultyName = null, jokerName = null }) {
     const el = this.el.endOverlay;
     if (!el) return;
 
@@ -266,7 +327,8 @@ export class HUD {
       : 'Il sovraccarico del Warden ha fatto detonare la bomba.';
 
     const extraRows =
-      (difficultyName ? `<div class="stat"><span class="stat-label">Difficoltà</span><span class="stat-value">${difficultyName}</span></div>` : '');
+      (difficultyName ? `<div class="stat"><span class="stat-label">Difficoltà</span><span class="stat-value">${difficultyName}</span></div>` : '') +
+      (jokerName ? `<div class="stat"><span class="stat-label">Joker</span><span class="stat-value">${jokerName}</span></div>` : '');
 
     el.innerHTML = `
       <div class="end-card ${won ? 'won' : 'lost'}">

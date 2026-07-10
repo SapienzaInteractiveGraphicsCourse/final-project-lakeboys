@@ -175,6 +175,12 @@ export class AudioManager {
     this._tone({ freq: 990, dur: 0.2, type: 'triangle', gain: 0.3, delay: 0.11 });
   }
 
+  // Joker scelto: piccola triade luminosa
+  jokerPick() {
+    [523, 659, 784].forEach((f, i) =>
+      this._tone({ freq: f, dur: 0.16, type: 'triangle', gain: 0.22, delay: i * 0.07 }));
+  }
+
   victory() {
     // Arpeggio maggiore ascendente + accordo finale
     const notes = [523, 659, 784, 1047];

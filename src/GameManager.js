@@ -1,6 +1,7 @@
 // DEFUSE-DECK 3D — GameManager (orchestratore)
 //
 // DUELLO a turni stile Balatro contro il Warden.
+//   • All'inizio SCEGLI UN JOKER (modificatore 3D sul banco, dal concept).
 //   • TU giochi mani di poker → carichi la barra DISINNESCO (verde);
 //     ogni 25% un modulo della bomba si apre fisicamente.
 //   • IL WARDEN cala le sue carte con l'artiglio → carica il SOVRACCARICO.
@@ -9,16 +10,19 @@
 // Responsabilità: SOLO la sequenza di gioco. Ogni dominio è delegato:
 //   core/GameState   → stato e regole (puro)
 //   core/combos      → valutazione delle mani (puro)
+//   core/jokers      → modificatori di punteggio (puro)
 //   core/difficulty  → parametri dei livelli (puro)
 //   ui/HUD           → tutto il DOM
 //   systems/Audio    → effetti sonori procedurali
 //   systems/Effects  → camera shake e flash
 //   systems/Particles→ burst di scintille (THREE.Points)
+//   systems/Jokers   → offerta/scelta dei joker 3D
 //   scene/*          → resa 3D (reazioni di Warden e bomba)
 
 import * as THREE from 'three';
 import { scoreHand, bestHand } from './core/combos.js';
 import { GameState, GamePhase, RULES } from './core/GameState.js';
+import { JOKERS, applyJokers } from './core/jokers.js';
 import { DIFFICULTIES, DEFAULT_DIFFICULTY } from './core/difficulty.js';
 
 // Tempi della sequenza del turno nemico (ms)
@@ -32,7 +36,7 @@ const ENEMY_TIMING = Object.freeze({
 export class GameManager {
   constructor({
     hud, audio, effects, particles,
-    sceneManager, cardSystem, enemyAI, enemyModel, bombModel,
+    sceneManager, cardSystem, enemyAI, enemyModel, bombModel, jokerSystem,
   }) {
     this.hud        = hud;
     this.audio      = audio;
@@ -43,11 +47,14 @@ export class GameManager {
     this.enemyAI    = enemyAI;
     this.enemyModel = enemyModel;
     this.bombModel  = bombModel;
+    this.jokers     = jokerSystem;
     this.input      = null;   // assegnato via attachInput()
 
-    this.difficulty = DEFAULT_DIFFICULTY;
+    this.difficulty     = DEFAULT_DIFFICULTY;
+    this.activeJokerDef = null;
 
-    this.state = new GameState(RULES);
+    // La partita parte in fase CHOOSING: prima si sceglie il joker
+    this.state = new GameState(RULES, GamePhase.CHOOSING);
     hud.bindState(this.state);
 
     hud.setTurnBanner('· STANDBY ·', '#98927f');
@@ -63,13 +70,15 @@ export class GameManager {
   get phase()        { return this.state.phase; }
   get isOver()       { return this.state.isOver; }
   get discardsLeft() { return this.state.discardsLeft; }
+  get isChoosingJoker() { return this.state.phase === GamePhase.CHOOSING; }
 
-  // Punteggio del giocatore (core/combos, logica pura)
+  // Punteggio del giocatore: base (combos) + joker attivo
   computeHandScore(cards) {
-    return scoreHand(cards);
+    const jokers = this.activeJokerDef ? [this.activeJokerDef] : [];
+    return applyJokers(scoreHand(cards), cards, jokers);
   }
 
-  // Miglior mano possibile dalla mano corrente
+  // Miglior mano TENENDO CONTO del joker attivo (scorer personalizzato)
   bestFromHand(cards) {
     return bestHand(cards, this.state.rules.MAX_SELECTED, (c) => this.computeHandScore(c));
   }
@@ -83,15 +92,36 @@ export class GameManager {
     this.hud.setThreat(this.enemyAI.threatMultiplier());
   }
 
-  // ── Avvio del duello (dopo il tutorial) ─────────────────────────────────────
-  // La mano viene DISTRIBUITA ORA, così si vede volare carta per carta
-  // dal mazzo fisico sul banco.
-  startDuel() {
+  // ── Fase 0: scelta del joker ─────────────────────────────────────────────────
+  startJokerChoice() {
+    this.jokers.offer(JOKERS);
+    this.hud.setTurnBanner('◆ SCEGLI UN JOKER', '#e5ae32');
+    this.hud.pulseTurnBanner();
+    this.hud.setStatus('Clicca un oggetto sul banco: ti accompagnerà per tutta la partita');
+  }
+
+  chooseJoker(model) {
+    if (!this.isChoosingJoker) return;
+    const def = this.jokers.choose(model);
+    if (!def) return;
+
+    this.activeJokerDef = def;
+    this.hud.setJoker(def);
+    this.audio.jokerPick();
+    this.particles.burst({
+      position: model.group.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+      color: def.color, count: 30, speed: 2.2, life: 650, gravity: 2.5,
+    });
+
+    // Inizia il duello vero e proprio: la mano viene DISTRIBUITA ORA,
+    // così si vede volare carta per carta dal mazzo fisico sul banco.
+    this.state.beginDuel();
     this.cards.deal(8);
     this.audio.cardDraw();
     this.hud.setDeckCount(this.cards.deckCount);
     this.hud.setTurnBanner('► TUO TURNO', '#a4c46a');
     this.hud.pulseTurnBanner();
+    this.hud.setStatus(`◆ ${def.name}: ${def.desc}`, '#e5ae32');
     this.showPotentialVoltage(this.input?.selectedCards ?? []);
   }
 
@@ -262,6 +292,7 @@ export class GameManager {
       stats: this.state.stats,
       turn: this.state.turn,
       difficultyName: this.difficulty.name,
+      jokerName: this.activeJokerDef?.name ?? null,
     });
   }
 

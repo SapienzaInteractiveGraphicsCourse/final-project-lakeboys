@@ -23,6 +23,12 @@
       <div class="bar-wrap"><div id="defuse-bar-fill" class="bar-fill"></div></div>
     </div>
 
+    <!-- Joker attivo (popolato da ui/HUD.js dopo la scelta) -->
+    <div id="joker-info"></div>
+
+    <!-- Tooltip joker: segue il cursore durante la fase di scelta -->
+    <div id="joker-tooltip"></div>
+
     <!-- Barra del WARDEN -->
     <div id="warden-panel" class="panel">
       <div class="panel-label">Warden · Sovraccarico</div>
@@ -92,6 +98,7 @@
         <li><span class="ic">🃏</span><span>Hai 8 carte. <b>Clicca</b> da 1 a 5 carte per formare una mano di poker: vale <span class="accent">chips × mult</span>.</span></li>
         <li><span class="ic">♻</span><span>Premi <b>Scarta</b> per cambiare le carte selezionate (3 scarti per turno) e cercare combo migliori.</span></li>
         <li><span class="ic">💡</span><span>In difficoltà? <b>Aiuto</b> seleziona la miglior mano possibile (2 usi per partita).</span></li>
+        <li><span class="ic">🔧</span><span>All'inizio <b>scegli un Joker</b> tra 3 oggetti sul banco: modifica il punteggio per tutta la partita.</span></li>
         <li><span class="ic">🖱️</span><span>Trascina col mouse per <b>ruotare la visuale</b>; trascina una carta per ispezionarla.</span></li>
       </ul>
       <div id="difficulty-row">

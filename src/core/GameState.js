@@ -15,6 +15,7 @@
 //   'end'         { won, stats }
 
 export const GamePhase = Object.freeze({
+  CHOOSING: 'choosing',   // scelta del joker a inizio partita
   PLAYER:   'player',
   ENEMY:    'enemy',
   OVER:     'over',
@@ -24,19 +25,19 @@ export const RULES = Object.freeze({
   DEFUSE_TARGET:       1400,   // soglia di vittoria (disinnesco)
   OVERCHARGE_TARGET:   1600,   // soglia di sconfitta (detonazione)
   DISCARDS_PER_TURN:   3,
-  SUGGESTIONS_PER_GAME: 2,     // aiuti "miglior mano" per partita
+  SUGGESTIONS_PER_GAME: 5,     // aiuti "miglior mano" per partita
   DANGER_THRESHOLD:    0.7,    // frazione di sovraccarico che attiva l'allarme
   MAX_SELECTED:        5,
 });
 
 export class GameState {
-  constructor(rules = RULES) {
+  constructor(rules = RULES, startPhase = GamePhase.PLAYER) {
     this.rules = rules;
 
     this.defuse     = 0;
     this.overcharge = 0;
     this.turn       = 1;
-    this.phase      = GamePhase.PLAYER;
+    this.phase      = startPhase;
 
     this.discardsLeft    = rules.DISCARDS_PER_TURN;
     this.suggestionsLeft = rules.SUGGESTIONS_PER_GAME;
@@ -91,6 +92,13 @@ export class GameState {
       ...this.rules,
       OVERCHARGE_TARGET: diff.overchargeTarget,
     });
+  }
+
+  // Fine della scelta del joker → inizia il duello vero e proprio
+  beginDuel() {
+    if (this.phase !== GamePhase.CHOOSING) return;
+    this.phase = GamePhase.PLAYER;
+    this._emit('phase', { phase: this.phase });
   }
 
   // Il giocatore ha calato una mano già valutata (score da combos.scoreHand).

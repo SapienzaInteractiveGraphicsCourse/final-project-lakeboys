@@ -100,6 +100,46 @@ button { font-family: var(--font-ui); }
 #defuse-value { color: var(--c-player); }
 #defuse-bar-fill { background: linear-gradient(180deg, var(--c-player), var(--c-player-d)); }
 
+/* ── Joker attivo (sotto il pannello giocatore) ──────────────────────────── */
+#joker-info {
+  position: absolute; top: 128px; left: 20px;
+  min-width: 200px; max-width: 250px;
+  padding: 9px 13px; border: 1px solid var(--panel-line); border-radius: 3px;
+  border-left: 3px solid var(--c-accent);
+  background: var(--panel-bg);
+  opacity: 0; transform: translateY(-6px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+#joker-info.visible { opacity: 1; transform: translateY(0); }
+#joker-info .jk-label { font-size: 10px; letter-spacing: 3px; color: var(--c-dim); text-transform: uppercase; }
+#joker-info .jk-name  { font-family: var(--font-display); font-size: 17px; font-weight: 400; letter-spacing: 2px; margin: 2px 0; }
+#joker-info .jk-desc  { font-size: 12px; color: var(--c-dim); line-height: 1.4; }
+
+/* ── Tooltip joker (fase di scelta): scheda tecnica che segue il cursore ── */
+#joker-tooltip {
+  position: fixed; z-index: 70; pointer-events: none;
+  max-width: 240px;
+  padding: 9px 13px; border: 1px solid var(--panel-line); border-radius: 3px;
+  border-left: 3px solid var(--c-accent);
+  background: var(--panel-bg);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+  opacity: 0; transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+#joker-tooltip.visible { opacity: 1; transform: translateY(0); }
+#joker-tooltip .jt-label {
+  font-size: 9px; letter-spacing: 3px; color: var(--c-dim); text-transform: uppercase;
+}
+#joker-tooltip .jt-name {
+  font-family: var(--font-display);
+  font-size: 17px; letter-spacing: 2px; margin: 2px 0;
+}
+#joker-tooltip .jt-desc { font-size: 12px; color: var(--c-paper); line-height: 1.4; }
+#joker-tooltip .jt-hint {
+  margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--panel-line);
+  font-size: 10px; letter-spacing: 1.5px; color: var(--c-dim); text-transform: uppercase;
+}
+
 /* Pannello WARDEN (in alto a destra) */
 #warden-panel {
   position: absolute; top: 16px; right: 20px; text-align: right;
@@ -271,6 +311,9 @@ button { font-family: var(--font-ui); }
 #score-reveal .sr-mult  { color: var(--c-enemy); }
 #score-reveal .sr-x, #score-reveal .sr-eq { color: var(--c-dim); font-size: 20px; }
 #score-reveal .sr-total { font-size: 34px; min-width: 150px; text-align: left; }
+#score-reveal .sr-jokers {
+  margin-top: 8px; font-size: 13px; font-weight: 600; letter-spacing: 2px;
+}
 #score-reveal .sr-total.slam { animation: totalSlam 0.4s cubic-bezier(.2, 1.4, .4, 1); }
 @keyframes totalSlam {
   0%   { transform: scale(2.4); opacity: 0; }

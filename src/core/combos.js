@@ -80,9 +80,9 @@ export function scoreHand(cards) {
 // Enumera tutti i sottoinsiemi di dimensione 1..maxSize e restituisce quello
 // dal punteggio più alto. Usato dall'AI nemica e dal suggerimento del giocatore.
 //   cards:  Card-like[] (devono avere .value e .suit)
-//   scorer: funzione di valutazione (default scoreHand); chi chiama può
-//           passare la propria versione, così il suggerimento resta coerente
-//           con le regole di punteggio effettive.
+//   scorer: funzione di valutazione (default scoreHand); il giocatore passa la
+//           propria versione con i joker applicati, così anche il suggerimento
+//           tiene conto dei modificatori attivi.
 // Ritorna { cards, score } dove score è l'oggetto dello scorer.
 export function bestHand(cards, maxSize = 5, scorer = scoreHand) {
   if (!cards || cards.length === 0) return { cards: [], score: scorer([]) };

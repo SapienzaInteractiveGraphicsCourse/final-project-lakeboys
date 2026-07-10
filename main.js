@@ -10,20 +10,21 @@
 
 import { update as tweenUpdate } from '@tweenjs/tween.js';
 
-import { SceneManager } from './src/scene/SceneManager.js';
-import { RoomModel }    from './src/scene/RoomModel.js';
-import { BombModel }    from './src/scene/BombModel.js';
-import { EnemyModel }   from './src/scene/EnemyModel.js';
-import { PlayerModel }  from './src/scene/PlayerModel.js';
-import { DeckModel }    from './src/scene/DeckModel.js';
-import { CardSystem }   from './src/systems/CardSystem.js';
-import { InputManager } from './src/systems/InputManager.js';
-import { AudioManager } from './src/systems/AudioManager.js';
-import { Effects }      from './src/systems/Effects.js';
-import { Particles }    from './src/systems/Particles.js';
-import { EnemyAI }      from './src/core/EnemyAI.js';
-import { HUD }          from './src/ui/HUD.js';
-import { GameManager }  from './src/GameManager.js';
+import { SceneManager }  from './src/scene/SceneManager.js';
+import { RoomModel }     from './src/scene/RoomModel.js';
+import { BombModel }     from './src/scene/BombModel.js';
+import { EnemyModel }    from './src/scene/EnemyModel.js';
+import { PlayerModel }   from './src/scene/PlayerModel.js';
+import { DeckModel }     from './src/scene/DeckModel.js';
+import { CardSystem }    from './src/systems/CardSystem.js';
+import { InputManager }  from './src/systems/InputManager.js';
+import { AudioManager }  from './src/systems/AudioManager.js';
+import { Effects }       from './src/systems/Effects.js';
+import { Particles }     from './src/systems/Particles.js';
+import { JokerSystem }   from './src/systems/JokerSystem.js';
+import { EnemyAI }       from './src/core/EnemyAI.js';
+import { HUD }           from './src/ui/HUD.js';
+import { GameManager }   from './src/GameManager.js';
 
 // ── Bootstrap: mondo 3D ───────────────────────────────────────────────────────
 const sceneManager = new SceneManager();
@@ -45,28 +46,29 @@ cardSystem.setDeckModel(deckModel);
 // REQUIRES: Hierarchical model — PointLight rossa figlia del gruppo bomba
 sceneManager.redLight.position.set(0, 0.1, 0);
 bombModel.group.add(sceneManager.redLight);
-bombModel.redLight = sceneManager.redLight;   // esposta per le animazioni della bomba
+bombModel.redLight = sceneManager.redLight;   // esposta per animazioni Fase 5
 
 // ── Bootstrap: sistemi e UI ───────────────────────────────────────────────────
-const audio     = new AudioManager();
-const effects   = new Effects(sceneManager.camera);
-const particles = new Particles(sceneManager.scene);
-const hud       = new HUD(audio);
+const audio       = new AudioManager();
+const effects     = new Effects(sceneManager.camera);
+const particles   = new Particles(sceneManager.scene);
+const jokerSystem = new JokerSystem(sceneManager.scene);
+const hud         = new HUD(audio);
 
 const gameManager = new GameManager({
   hud, audio, effects, particles,
-  sceneManager, cardSystem, enemyAI, enemyModel, bombModel,
+  sceneManager, cardSystem, enemyAI, enemyModel, bombModel, jokerSystem,
 });
 
-// NB: la mano iniziale viene distribuita DOPO il tutorial (GameManager.startDuel),
-// così le carte volano dal mazzo fisico sul banco.
+// NB: la mano iniziale viene distribuita DOPO la scelta del joker
+// (GameManager.chooseJoker), così le carte volano dal mazzo fisico.
 hud.setDeckCount(cardSystem.deckCount);
 
 // REQUIRES: THREE.Raycaster — InputManager gestisce tutta l'interazione
 const inputManager = new InputManager({
   camera: sceneManager.camera,
   renderer: sceneManager.renderer,
-  cardSystem, gameManager, sceneManager, audio, hud, particles,
+  cardSystem, gameManager, sceneManager, audio, hud, jokerSystem, particles,
 });
 gameManager.attachInput(inputManager);
 
@@ -74,7 +76,7 @@ gameManager.attachInput(inputManager);
 window.App = {
   sceneManager, roomModel, bombModel, enemyModel, playerModel, deckModel,
   cardSystem, enemyAI, gameManager, inputManager,
-  audio, effects, particles, hud,
+  audio, effects, particles, jokerSystem, hud,
 };
 
 // ── Tutorial iniziale: difficoltà + avvio ─────────────────────────────────────
@@ -91,7 +93,8 @@ document.getElementById('btn-start')?.addEventListener('click', () => {
   gameManager.applyDifficulty(diffId);
   hud.hideTutorial();
   audio.cardDraw();
-  gameManager.startDuel();
+  // Fase 0: scelta del joker sul banco (il duello parte dopo la scelta)
+  gameManager.startJokerChoice();
 });
 
 // ── Animation Loop ────────────────────────────────────────────────────────────
@@ -112,6 +115,7 @@ function animate(time) {
   enemyModel.update(t);
   playerModel.update(t);
   deckModel.update(t);
+  jokerSystem.update(t);
   particles.update(dt);
 
   // Camera shake: offset applicato SOLO durante il render (niente deriva Orbit)

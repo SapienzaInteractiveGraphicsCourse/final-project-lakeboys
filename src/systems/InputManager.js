@@ -12,7 +12,7 @@ import { Tween, Easing } from '@tweenjs/tween.js';
 import { BOMB_POS } from '../scene/config.js';
 
 export class InputManager {
-  constructor({ camera, renderer, cardSystem, gameManager, sceneManager, audio, hud, particles }) {
+  constructor({ camera, renderer, cardSystem, gameManager, sceneManager, audio, hud, jokerSystem, particles }) {
     this.camera       = camera;
     this.renderer     = renderer;
     this.cardSystem   = cardSystem;
@@ -20,6 +20,7 @@ export class InputManager {
     this.sceneManager = sceneManager;   // per abilitare/disabilitare OrbitControls
     this.audio        = audio;
     this.hud          = hud;
+    this.jokerSystem  = jokerSystem;    // picking dei joker in fase di scelta
     this.particles    = particles;      // scintille sugli impatti delle carte
 
     // REQUIRES: THREE.Raycaster — unico punto di interazione mouse ↔ scena 3D
@@ -136,6 +137,19 @@ export class InputManager {
     return obj?.userData?.cardRef ?? null;
   }
 
+  // REQUIRES: THREE.Raycaster — picking dei joker durante la fase di scelta
+  _hitJoker(event) {
+    this._toNDC(event);
+    this.raycaster.setFromCamera(this.mouseNDC, this.camera);
+    const hits = this.raycaster.intersectObjects(
+      this.jokerSystem.getPickGroups(), true
+    );
+    if (!hits.length) return null;
+    let obj = hits[0].object;
+    while (obj && !obj.userData?.isJoker) obj = obj.parent;
+    return obj?.userData?.jokerRef ?? null;
+  }
+
   // ── Mouse Down — avvia drag-rotate ───────────────────────────────────────
 
   _onMouseDown(event) {
@@ -158,6 +172,15 @@ export class InputManager {
   // ── Mouse Move — hover + drag-rotate ────────────────────────────────────
 
   _onMouseMove(event) {
+    // Fase di scelta del joker: hover sugli oggetti del banco + tooltip
+    if (this.jokerSystem?.isChoosing) {
+      const joker = this._hitJoker(event);
+      this.jokerSystem.setHover(joker);
+      this.hud?.showJokerTooltip(joker?.def ?? null, event.clientX, event.clientY);
+      this.renderer.domElement.style.cursor = joker ? 'pointer' : 'default';
+      return;
+    }
+
     // Modalità drag-rotate
     if (this._dragCard) {
       const dx = event.clientX - this._dragLast.x;
@@ -266,6 +289,17 @@ export class InputManager {
     // Se il mousedown ha prodotto un drag, ignora il click
     if (this._dragMoved) { this._dragMoved = false; return; }
 
+    // Fase di scelta del joker: il click sceglie l'oggetto
+    if (this.jokerSystem?.isChoosing) {
+      const joker = this._hitJoker(event);
+      if (joker) {
+        this.gameManager.chooseJoker(joker);
+        this.hud?.showJokerTooltip(null);   // la scelta è fatta: via il tooltip
+        this.renderer.domElement.style.cursor = 'default';
+      }
+      return;
+    }
+
     // Si possono selezionare carte solo durante il proprio turno
     if (this.gameManager.phase !== 'player' || this.gameManager.isOver) return;
 
@@ -342,8 +376,8 @@ export class InputManager {
   }
 
   // ── Play Hand ────────────────────────────────────────────────────────────
-  // Le carte scelte volano verso la bomba (caricano il DISINNESCO); poi la
-  // mano si ricompone pescando dal mazzo.
+  // Le carte scelte volano verso la bomba (caricano il DISINNESCO); poi la mano
+  // si ricompone pescando dal mazzo e il turno passa al Warden.
 
   _onPlayHand() {
     if (this.gameManager.phase !== 'player' || this.gameManager.isOver) return;
