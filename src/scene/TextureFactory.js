@@ -1,8 +1,9 @@
 // DEFUSE-DECK 3D — TextureFactory
 //
 // REQUIRES: Texture maps — Color map, Normal map, Roughness map, Metalness map
-// Tutte le texture sono generate proceduralmente via Canvas API (nessun file .png esterno).
-// Ogni funzione restituisce un THREE.CanvasTexture pronto all'uso.
+// I materiali principali (cemento, legno, metallo) usano set PBR fotografici da
+// public/textures/ (ambientCG, CC0). Restano procedurali via Canvas API solo le
+// carte (olografico PCB, tinta per-seme), la banda hazard e i numeri delle carte.
 
 import * as THREE from 'three';
 
@@ -26,173 +27,32 @@ function tile(tex, rx, ry, aniso = 4) {
   return tex;
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// LEGNO — Color · Normal · Roughness
-// ════════════════════════════════════════════════════════════════════════════════
+// ── Caricamento texture da file (public/textures) ───────────────────────────
+// I materiali principali (cemento, legno, metallo) usano set PBR fotografici
+// scaricati da ambientCG (CC0) invece delle mappe generate via Canvas.
+// Cache dei byte immagine: chiamate ripetute allo stesso file riusano lo stesso
+// Image (una sola richiesta HTTP), ma ogni THREE.Texture resta indipendente e
+// riceve il proprio onLoad → needsUpdate. Così superfici diverse (pavimento,
+// pareti, basamento) possono tilare la stessa texture con densità diverse.
+THREE.Cache.enabled = true;
+const _loader  = new THREE.TextureLoader();
+const TEX_BASE = 'public/textures/';
 
-// REQUIRES: Color map — venatura generata con doppia sinusoide incommensurabile
-export function woodColorMap(sz = 512) {
-  return makeTex(sz, (ctx, s) => {
-    const img = ctx.createImageData(s, s);
-    const d   = img.data;
-
-    for (let y = 0; y < s; y++) {
-      for (let x = 0; x < s; x++) {
-        const i = (y * s + x) * 4;
-        // Doppia sinusoide: frequenze incommenssurabili → pattern aperiodico (legno organico)
-        const g = (Math.sin(x * 0.12 + Math.sin(y * 0.038) * 6.8) + 1) * 0.5;
-        const k = (Math.sin(x * 0.43 + y * 0.066) + 1) * 0.5 * 0.18;
-        const v = g + k;
-
-        d[i]   = Math.min(255, 60 + v * 58);    // R — canale caldo
-        d[i+1] = Math.min(255, 32 + v * 30);    // G
-        d[i+2] = Math.min(255,  9 + v * 14);    // B
-        d[i+3] = 255;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-
-    // Nodi del legno (sfumature radiali scure)
-    [[s * 0.28, s * 0.37, 26], [s * 0.71, s * 0.62, 20], [s * 0.50, s * 0.82, 17]]
-      .forEach(([kx, ky, kr]) => {
-        const gr = ctx.createRadialGradient(kx, ky, 1, kx, ky, kr);
-        gr.addColorStop(0, 'rgba(16,6,2,0.78)');
-        gr.addColorStop(1, 'rgba(16,6,2,0)');
-        ctx.fillStyle = gr;
-        ctx.fillRect(kx - kr, ky - kr, kr * 2, kr * 2);
-      });
-  });
+// Carica una texture da file. isColor=true → spazio colore sRGB; le mappe dati
+// (normal/roughness/metalness) restano in spazio lineare.
+function loadFileTex(path, isColor, rx, ry, aniso = 8) {
+  const tex = _loader.load(TEX_BASE + path);
+  tex.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(rx, ry);
+  tex.anisotropy = aniso;
+  return tex;
 }
 
-// REQUIRES: Normal map — derivata della sinusoide codificata in R·G·B
-export function woodNormalMap(sz = 512) {
-  return makeTex(sz, (ctx, s) => {
-    const img = ctx.createImageData(s, s);
-    const d   = img.data;
-
-    for (let y = 0; y < s; y++) {
-      for (let x = 0; x < s; x++) {
-        const i  = (y * s + x) * 4;
-        // La derivata dx della venatura dà la pendenza sul piano X (normale R)
-        const dx = Math.cos(x * 0.12 + Math.sin(y * 0.038) * 6.8) * (0.12 * 15);
-        const dy = Math.cos(x * 0.43 + y * 0.066) * (0.066 * 10) * 0.6;
-
-        d[i]   = Math.max(0, Math.min(255, 128 + dx)); // R = X normal
-        d[i+1] = Math.max(0, Math.min(255, 128 + dy)); // G = Y normal
-        d[i+2] = 255;                                    // B = Z (verso viewer)
-        d[i+3] = 255;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-  });
-}
-
-// REQUIRES: Roughness map — fibre ruvide, cime della venatura leggermente più lucide
-export function woodRoughnessMap(sz = 256) {
-  return makeTex(sz, (ctx, s) => {
-    const img = ctx.createImageData(s, s);
-    const d   = img.data;
-
-    for (let y = 0; y < s; y++) {
-      for (let x = 0; x < s; x++) {
-        const i = (y * s + x) * 4;
-        const g = (Math.sin(x * 0.12 + Math.sin(y * 0.038) * 6.8) + 1) * 0.5;
-        // Cime: roughness 0.68; fibre: 0.88
-        const v = Math.floor(175 + g * 48);
-        d[i] = d[i+1] = d[i+2] = v;
-        d[i+3] = 255;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-  });
-}
-
-// ════════════════════════════════════════════════════════════════════════════════
-// METALLO — Color · Normal · Roughness · Metalness
-// ════════════════════════════════════════════════════════════════════════════════
-
-// REQUIRES: Color map — verniciatura militare verde con graffi procedurali
-export function metalColorMap(sz = 256) {
-  return makeTex(sz, (ctx, s) => {
-    // Base: verde militare
-    ctx.fillStyle = '#2b3a1f';
-    ctx.fillRect(0, 0, s, s);
-
-    // Mottling: piccoli rettangoli semi-trasparenti sovrapposti
-    for (let i = 0; i < 100; i++) {
-      const alpha = (Math.random() * 0.05 + 0.01) * (Math.random() > 0.5 ? 1 : -1);
-      const col   = alpha > 0 ? `rgba(255,255,200,${Math.abs(alpha)})` : `rgba(0,0,0,${Math.abs(alpha)})`;
-      ctx.fillStyle = col;
-      ctx.fillRect(Math.random() * s, Math.random() * s, Math.random() * 14 + 3, Math.random() * 14 + 3);
-    }
-
-    // Graffi lineari (angoli random, lunghezze variabili)
-    for (let i = 0; i < 50; i++) {
-      const x0  = Math.random() * s;
-      const y0  = Math.random() * s;
-      const ang = Math.random() * Math.PI;
-      const len = Math.random() * 38 + 6;
-      ctx.strokeStyle = `rgba(165,175,145,${Math.random() * 0.30 + 0.04})`;
-      ctx.lineWidth   = Math.random() * 0.65 + 0.15;
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x0 + Math.cos(ang) * len, y0 + Math.sin(ang) * len);
-      ctx.stroke();
-    }
-  });
-}
-
-// REQUIRES: Normal map — piastrellatura metallica + graffi in rilievo
-export function metalNormalMap(sz = 256) {
-  return makeTex(sz, (ctx, s) => {
-    const img = ctx.createImageData(s, s);
-    const d   = img.data;
-
-    for (let y = 0; y < s; y++) {
-      for (let x = 0; x < s; x++) {
-        const i = (y * s + x) * 4;
-        // Microgeometria della lamiera: sottile modulazione su griglia 32 px
-        const fx    = ((x % 32) / 32 - 0.5) * 3.5;
-        const fy    = ((y % 32) / 32 - 0.5) * 3.5;
-        const noise = (Math.random() - 0.5) * 4; // graffi casuali
-
-        d[i]   = Math.max(0, Math.min(255, 128 + fx + noise));
-        d[i+1] = Math.max(0, Math.min(255, 128 + fy));
-        d[i+2] = 255;
-        d[i+3] = 255;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-  });
-}
-
-// REQUIRES: Roughness map — metallo verniciato: semi-opaco (0.40–0.58)
-export function metalRoughnessMap(sz = 128) {
-  return makeTex(sz, (ctx, s) => {
-    const img = ctx.createImageData(s, s);
-    const d   = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const v = Math.max(0, Math.min(255, 115 + (Math.random() - 0.5) * 38));
-      d[i] = d[i+1] = d[i+2] = v;
-      d[i+3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-  });
-}
-
-// REQUIRES: Metalness map — alta metallicità con variazioni per usura vernice
-export function metalMetalnessMap(sz = 128) {
-  return makeTex(sz, (ctx, s) => {
-    const img = ctx.createImageData(s, s);
-    const d   = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const v = Math.max(0, Math.min(255, 200 + (Math.random() - 0.5) * 28));
-      d[i] = d[i+1] = d[i+2] = v;
-      d[i+3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-  });
-}
+// Prefissi dei set PBR presenti in public/textures/
+const CONCRETE_DIR = 'Concrete042C_1K-JPG/Concrete042C_1K-JPG_';
+const WOOD_DIR     = 'Planks037A_1K-JPG/Planks037A_1K-JPG_';
+const METAL_DIR    = 'PaintedMetal006_1K-JPG/PaintedMetal006_1K-JPG_';
 
 // ════════════════════════════════════════════════════════════════════════════════
 // CARTE — Color (olografico PCB) · Normal · Roughness
@@ -291,89 +151,6 @@ export function cardRoughnessMap(sz = 128) {
   });
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// CEMENTO — Color · Normal · Roughness  (pavimento e pareti del bunker)
-// ════════════════════════════════════════════════════════════════════════════════
-
-// REQUIRES: Color map — cemento industriale con macchie, crepe e fughe tra le piastre
-export function concreteColorMap(sz = 512) {
-  return makeTex(sz, (ctx, s) => {
-    // Base grigio-bluastra scura
-    ctx.fillStyle = '#2a2c33';
-    ctx.fillRect(0, 0, s, s);
-
-    // Macchie di sporco / umidità (rettangoli morbidi sovrapposti)
-    for (let i = 0; i < 150; i++) {
-      const a = Math.random() * 0.06;
-      ctx.fillStyle = Math.random() > 0.5
-        ? `rgba(20,22,28,${a})`
-        : `rgba(70,74,84,${a * 0.8})`;
-      const w = Math.random() * 60 + 10;
-      ctx.fillRect(Math.random() * s, Math.random() * s, w, w * (Math.random() * 0.6 + 0.5));
-    }
-
-    // Fughe tra le piastre (griglia 1/2)
-    ctx.strokeStyle = 'rgba(8,9,12,0.85)';
-    ctx.lineWidth   = 3;
-    ctx.beginPath();
-    ctx.moveTo(s / 2, 0); ctx.lineTo(s / 2, s);
-    ctx.moveTo(0, s / 2); ctx.lineTo(s, s / 2);
-    ctx.stroke();
-
-    // Crepe sottili ramificate
-    ctx.strokeStyle = 'rgba(10,11,14,0.6)';
-    for (let i = 0; i < 7; i++) {
-      let x = Math.random() * s, y = Math.random() * s;
-      ctx.lineWidth = Math.random() * 1.2 + 0.4;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      const steps = Math.floor(Math.random() * 6) + 4;
-      for (let k = 0; k < steps; k++) {
-        x += (Math.random() - 0.5) * 50;
-        y += (Math.random() - 0.5) * 50;
-        ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-  });
-}
-
-// REQUIRES: Normal map — granulosità del cemento + rilievo delle fughe
-export function concreteNormalMap(sz = 512) {
-  return makeTex(sz, (ctx, s) => {
-    const img = ctx.createImageData(s, s);
-    const d   = img.data;
-    for (let y = 0; y < s; y++) {
-      for (let x = 0; x < s; x++) {
-        const i = (y * s + x) * 4;
-        const grain = (Math.random() - 0.5) * 10;
-        // incavo lungo le fughe centrali
-        const seamX = Math.abs(x - s / 2) < 3 ? (x < s / 2 ? -40 : 40) : 0;
-        const seamY = Math.abs(y - s / 2) < 3 ? (y < s / 2 ? -40 : 40) : 0;
-        d[i]   = Math.max(0, Math.min(255, 128 + grain + seamX));
-        d[i+1] = Math.max(0, Math.min(255, 128 + grain + seamY));
-        d[i+2] = 255;
-        d[i+3] = 255;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-  });
-}
-
-// REQUIRES: Roughness map — cemento opaco con chiazze lievemente lucide (umidità)
-export function concreteRoughnessMap(sz = 256) {
-  return makeTex(sz, (ctx, s) => {
-    const img = ctx.createImageData(s, s);
-    const d   = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const v = Math.max(0, Math.min(255, 205 + (Math.random() - 0.5) * 60));
-      d[i] = d[i+1] = d[i+2] = v;
-      d[i+3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-  });
-}
-
 // REQUIRES: Color map — strisce di pericolo giallo/nero diagonali (banda hazard)
 export function hazardStripeMap(sz = 256) {
   return makeTex(sz, (ctx, s) => {
@@ -401,26 +178,26 @@ export function hazardStripeMap(sz = 256) {
 
 export function getConcreteMaps(tileX = 6, tileY = 6) {
   return {
-    map:          tile(concreteColorMap(512),     tileX, tileY),
-    normalMap:    tile(concreteNormalMap(512),    tileX, tileY),
-    roughnessMap: tile(concreteRoughnessMap(256), tileX, tileY),
+    map:          loadFileTex(CONCRETE_DIR + 'Color.jpg',     true,  tileX, tileY),
+    normalMap:    loadFileTex(CONCRETE_DIR + 'NormalGL.jpg',  false, tileX, tileY),
+    roughnessMap: loadFileTex(CONCRETE_DIR + 'Roughness.jpg', false, tileX, tileY),
   };
 }
 
 export function getWoodMaps(tileX = 3.5, tileY = 2.2) {
   return {
-    map:          tile(woodColorMap(512),    tileX, tileY),
-    normalMap:    tile(woodNormalMap(512),   tileX, tileY),
-    roughnessMap: tile(woodRoughnessMap(256), tileX, tileY),
+    map:          loadFileTex(WOOD_DIR + 'Color.jpg',     true,  tileX, tileY),
+    normalMap:    loadFileTex(WOOD_DIR + 'NormalGL.jpg',  false, tileX, tileY),
+    roughnessMap: loadFileTex(WOOD_DIR + 'Roughness.jpg', false, tileX, tileY),
   };
 }
 
 export function getMetalMaps() {
   return {
-    map:          metalColorMap(256),
-    normalMap:    metalNormalMap(256),
-    roughnessMap: metalRoughnessMap(128),
-    metalnessMap: metalMetalnessMap(128),
+    map:          loadFileTex(METAL_DIR + 'Color.jpg',     true,  1, 1),
+    normalMap:    loadFileTex(METAL_DIR + 'NormalGL.jpg',  false, 1, 1),
+    roughnessMap: loadFileTex(METAL_DIR + 'Roughness.jpg', false, 1, 1),
+    metalnessMap: loadFileTex(METAL_DIR + 'Metalness.jpg', false, 1, 1),
   };
 }
 

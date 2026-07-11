@@ -32,10 +32,7 @@ export class SceneManager {
     this.lampGroup    = null;
     this.lampBulb     = null;
 
-    // Cables connettono il tavolo alla bomba — si illuminano col voltaggio
-    this.cables       = [];
-    this._voltageProgress = 0;
-    this._redPulse        = 0;   // picco transitorio della luce rossa quando la bomba è colpita
+    this._redPulse    = 0;   // picco transitorio della luce rossa quando la bomba è colpita
 
     // Faretti drammatici dedicati
     this.bombSpot  = null;
@@ -53,7 +50,6 @@ export class SceneManager {
     this._initLights();
     this._initTable();
     this._initBedsideLamp();
-    this._initCables();
     this._initAtmosphere();
     this._initDust();
     this._initControls();
@@ -271,89 +267,6 @@ export class SceneManager {
     this.scene.add(g);
   }
 
-  // ── Cables ─────────────────────────────────────────────────────────────────
-  // Cavi che partono dai bordi del tavolo e convergono sulla base della bomba.
-  // Ogni cavo ha una soglia di voltaggio: si illumina progressivamente.
-
-  _initCables() {
-    const TABLE_Y = TABLE_TOP_Y;   // superficie del banco
-    // Base della bomba gigante, lato rivolto verso il banco
-    const BASE = new THREE.Vector3(BOMB_POS.x + 1.6, FLOOR_Y + 0.55, BOMB_POS.z + 1.4);
-
-    // Partono dal lato sinistro del banco e attraversano la stanza fino alla bomba
-    const specs = [
-      { start: new THREE.Vector3(-6.2, TABLE_Y, -2.6), color: 0xff3344, threshold: 0.00 },
-      { start: new THREE.Vector3(-6.2, TABLE_Y,  0.2), color: 0xffcc22, threshold: 0.25 },
-      { start: new THREE.Vector3(-5.2, TABLE_Y, -3.6), color: 0x33ff88, threshold: 0.50 },
-      { start: new THREE.Vector3(-5.2, TABLE_Y,  1.4), color: 0x44ccff, threshold: 0.75 },
-    ];
-
-    specs.forEach((spec, idx) => {
-      // Cade dal bordo del banco verso il pavimento
-      const edge     = new THREE.Vector3(spec.start.x - 0.7, TABLE_Y - 0.6, spec.start.z);
-      // Striscia sul pavimento verso la bomba
-      const floorMid = new THREE.Vector3(
-        (spec.start.x + BASE.x) * 0.5,
-        FLOOR_Y + 0.12,
-        (spec.start.z + BASE.z) * 0.5,
-      );
-      // Risale sulla piattaforma fino al connettore
-      const near = new THREE.Vector3(BASE.x + 0.7, FLOOR_Y + 0.25, BASE.z + 0.2);
-
-      const curve = new THREE.CatmullRomCurve3(
-        [spec.start, edge, floorMid, near, BASE.clone()],
-        false,
-        'catmullrom',
-        0.4,
-      );
-      const geom = new THREE.TubeGeometry(curve, 96, 0.038, 8, false);
-
-      // Materiale emissivo: parte spento, lo accendiamo via setVoltageProgress
-      const mat = new THREE.MeshStandardMaterial({
-        color:    new THREE.Color(spec.color).multiplyScalar(0.25),
-        emissive: new THREE.Color(spec.color),
-        emissiveIntensity: 0.05,
-        roughness: 0.55,
-        metalness: 0.35,
-      });
-
-      const mesh = new THREE.Mesh(geom, mat);
-      mesh.castShadow    = true;
-      mesh.receiveShadow = true;
-      this.scene.add(mesh);
-
-      // PERF: solo i cavi pari hanno una PointLight reale (2 invece di 4).
-      // Le luci a intensità 0 pesano comunque nello shader, quindi ne creiamo meno.
-      let pl = null;
-      if (idx % 2 === 0) {
-        pl = new THREE.PointLight(spec.color, 0, 4.5, 2);
-        pl.position.copy(floorMid);
-        pl.position.y = FLOOR_Y + 0.5;
-        this.scene.add(pl);
-      }
-
-      // Connettore visivo alla base della bomba (piccolo cilindro)
-      const plugMat = new THREE.MeshStandardMaterial({
-        color: 0x1a1a1a, roughness: 0.6, metalness: 0.8,
-        emissive: new THREE.Color(spec.color),
-        emissiveIntensity: 0.0,
-      });
-      const plug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.12, 10), plugMat);
-      plug.position.copy(BASE);
-      this.scene.add(plug);
-
-      this.cables.push({
-        mesh, light: pl, plug, baseColor: spec.color, threshold: spec.threshold,
-      });
-    });
-  }
-
-  // ── API: aggiorna l'illuminazione dei cavi in base al voltaggio ────────────
-  // progress ∈ [0,1]
-  setVoltageProgress(progress) {
-    this._voltageProgress = Math.max(0, Math.min(1, progress || 0));
-  }
-
   // ── API: picco transitorio della luce rossa (bomba colpita dal Warden) ──────
   pulseRedLight(boost = 3) {
     this._redPulse = Math.max(this._redPulse, boost);
@@ -432,6 +345,7 @@ export class SceneManager {
   setCameraView(view) {
     const preset = CAMERA_VIEWS[view] || CAMERA_VIEWS.third;
     this.cameraView = view;
+    this._cine = null;   // il cambio vista esplicito ha priorità sulla cinematica
     this.controls.minDistance = view === 'first' ? 1.2 : 4;
     this._camAnim = {
       fromPos: this.camera.position.clone(),
@@ -446,6 +360,27 @@ export class SceneManager {
 
   toggleCameraView() {
     return this.setCameraView(this.cameraView === 'third' ? 'first' : 'third');
+  }
+
+  // ── API: cinematica sulla bomba ──────────────────────────────────────────────
+  // Quando la bomba si anima (modulo che si apre, esplosione) la camera fa un
+  // dolly-in verso di lei, indugia mentre l'animazione si svolge (hold), poi
+  // torna esattamente alla vista precedente. Stessa tecnica della transizione
+  // di vista: interpolazione manuale sul tempo reale con OrbitControls sospeso,
+  // così non c'è deriva né conflitto con l'input dell'utente.
+  focusOnBomb({ inMs = 750, holdMs = 1500, outMs = 850 } = {}) {
+    if (this._cine) return false;      // una cinematica alla volta
+    this._camAnim = null;              // interrompe eventuali transizioni di vista
+    this._cine = {
+      fromPos: this.camera.position.clone(),
+      fromTgt: this.controls.target.clone(),
+      // Vantage: tre-quarti frontale, leggermente dall'alto — inquadra serrature e pannello
+      toPos: new THREE.Vector3(BOMB_POS.x + 5.8, 3.2, BOMB_POS.z + 6.6),
+      toTgt: new THREE.Vector3(BOMB_POS.x, 1.9, BOMB_POS.z),
+      start: performance.now(),
+      inMs, holdMs, outMs,
+    };
+    return true;
   }
 
   // ── Resize handler ──────────────────────────────────────────────────────────
@@ -481,19 +416,6 @@ export class SceneManager {
       this.lampBulb.material.emissiveIntensity = 4.5 * lampFlick;
     }
 
-    // Cavi: ogni cavo si attiva quando il progresso supera la sua soglia,
-    // poi pulsa proceduralmente per dare l'impressione di "energia che scorre".
-    this.cables.forEach(c => {
-      const over = this._voltageProgress - c.threshold;        // quanto siamo oltre la soglia
-      // attivazione graduale: 0 sotto soglia, sale fino a 1 nei 0.25 successivi
-      const act  = Math.max(0, Math.min(1, over / 0.25));
-      const pulse = 0.75 + 0.25 * Math.sin(t * 4.2 + c.threshold * 9);
-      const emissive = act > 0 ? (1.4 * pulse + 0.4) * act + 0.05 : 0.05;
-      c.mesh.material.emissiveIntensity = emissive;
-      if (c.light) c.light.intensity    = act * 1.8 * pulse;
-      c.plug.material.emissiveIntensity = act * 1.6;
-    });
-
     // Pulviscolo: lento moto rotatorio + galleggiamento sinusoidale
     if (this.dust) {
       this.dust.rotation.y = t * 0.012;
@@ -504,7 +426,29 @@ export class SceneManager {
     // basata sul TEMPO REALE (non sul dt per frame) così resta corretta anche se
     // il browser limita i frame. Mentre è attiva, OrbitControls resta sospeso per
     // non annullare il movimento; al termine riprende dal nuovo punto.
-    if (this._camAnim) {
+    // Cinematica bomba (in → hold → out): ha priorità sulla transizione di vista
+    if (this._cine) {
+      const c = this._cine;
+      const el = performance.now() - c.start;
+      const ease = k => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+      if (el < c.inMs) {                                   // dolly-in verso la bomba
+        const e = ease(el / c.inMs);
+        this.camera.position.lerpVectors(c.fromPos, c.toPos, e);
+        this.controls.target.lerpVectors(c.fromTgt, c.toTgt, e);
+      } else if (el < c.inMs + c.holdMs) {                 // hold: l'animazione si svolge
+        this.camera.position.copy(c.toPos);
+        this.controls.target.copy(c.toTgt);
+      } else if (el < c.inMs + c.holdMs + c.outMs) {       // dolly-out: ritorno
+        const e = ease((el - c.inMs - c.holdMs) / c.outMs);
+        this.camera.position.lerpVectors(c.toPos, c.fromPos, e);
+        this.controls.target.lerpVectors(c.toTgt, c.fromTgt, e);
+      } else {                                             // fine: ripristino esatto
+        this.camera.position.copy(c.fromPos);
+        this.controls.target.copy(c.fromTgt);
+        this._cine = null;
+      }
+      this.camera.lookAt(this.controls.target);
+    } else if (this._camAnim) {
       const a = this._camAnim;
       const k = Math.min((performance.now() - a.start) / a.dur, 1);
       const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;   // easeInOutQuad

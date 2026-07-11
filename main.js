@@ -14,7 +14,6 @@ import { SceneManager }  from './src/scene/SceneManager.js';
 import { RoomModel }     from './src/scene/RoomModel.js';
 import { BombModel }     from './src/scene/BombModel.js';
 import { EnemyModel }    from './src/scene/EnemyModel.js';
-import { PlayerModel }   from './src/scene/PlayerModel.js';
 import { DeckModel }     from './src/scene/DeckModel.js';
 import { CardSystem }    from './src/systems/CardSystem.js';
 import { InputManager }  from './src/systems/InputManager.js';
@@ -31,7 +30,6 @@ const sceneManager = new SceneManager();
 const roomModel    = new RoomModel();
 const bombModel    = new BombModel();
 const enemyModel   = new EnemyModel();
-const playerModel  = new PlayerModel();      // l'artificiere (personaggio del giocatore)
 const deckModel    = new DeckModel();        // mazzo fisico + pila degli scarti
 const cardSystem   = new CardSystem(sceneManager.scene);
 const enemyAI      = new EnemyAI();          // il "cervello" che gioca le carte del Warden
@@ -39,7 +37,6 @@ const enemyAI      = new EnemyAI();          // il "cervello" che gioca le carte
 sceneManager.scene.add(roomModel.group);
 sceneManager.scene.add(bombModel.group);
 sceneManager.scene.add(enemyModel.group);
-sceneManager.scene.add(playerModel.group);
 sceneManager.scene.add(deckModel.group);
 cardSystem.setDeckModel(deckModel);
 
@@ -57,7 +54,7 @@ const hud         = new HUD(audio);
 
 const gameManager = new GameManager({
   hud, audio, effects, particles,
-  sceneManager, cardSystem, enemyAI, enemyModel, bombModel, jokerSystem,
+  sceneManager, roomModel, cardSystem, enemyAI, enemyModel, bombModel, jokerSystem,
 });
 
 // NB: la mano iniziale viene distribuita DOPO la scelta del joker
@@ -68,13 +65,13 @@ hud.setDeckCount(cardSystem.deckCount);
 const inputManager = new InputManager({
   camera: sceneManager.camera,
   renderer: sceneManager.renderer,
-  cardSystem, gameManager, sceneManager, audio, hud, jokerSystem, particles,
+  cardSystem, gameManager, sceneManager, audio, hud, jokerSystem, particles, bombModel,
 });
 gameManager.attachInput(inputManager);
 
 // Esposto globalmente per debug e per i trigger dei modelli (BombModel → effects)
 window.App = {
-  sceneManager, roomModel, bombModel, enemyModel, playerModel, deckModel,
+  sceneManager, roomModel, bombModel, enemyModel, deckModel,
   cardSystem, enemyAI, gameManager, inputManager,
   audio, effects, particles, jokerSystem, hud,
 };
@@ -93,6 +90,7 @@ document.getElementById('btn-start')?.addEventListener('click', () => {
   gameManager.applyDifficulty(diffId);
   hud.hideTutorial();
   audio.cardDraw();
+  audio.playMusic();   // passa dal tema del menu al tema della partita (loop)
   // Fase 0: scelta del joker sul banco (il duello parte dopo la scelta)
   gameManager.startJokerChoice();
 });
@@ -113,7 +111,6 @@ function animate(time) {
   roomModel.update(t);
   bombModel.update(t);
   enemyModel.update(t);
-  playerModel.update(t);
   deckModel.update(t);
   jokerSystem.update(t);
   particles.update(dt);

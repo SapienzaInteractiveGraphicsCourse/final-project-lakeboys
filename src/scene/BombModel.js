@@ -17,6 +17,18 @@ import { Tween, Easing } from '@tweenjs/tween.js';
 import { getMetalMaps } from './TextureFactory.js';
 import { BOMB_POS, BOMB_SCALE, FLOOR_Y } from './config.js';
 
+// Yaw che presenta ciascuna zona di disinnesco verso la camera della cinematica.
+// La camera (SceneManager.focusOnBomb) guarda la bomba dal vantaggio con offset
+// XZ (+5.8, +6.6) → angolo di vista α = atan2(5.8, 6.6). Ogni zona ha una normale
+// locale nel piano XZ: serratura1 su −X, serratura2 e pannello su +X. Perché la
+// zona guardi la camera serve yaw = α − atan2(normalX, normalZ).
+const CINE_CAM_ANGLE = Math.atan2(5.8, 6.6);
+const STAGE_YAW = {
+  1: CINE_CAM_ANGLE - Math.atan2(-1, 0),   // serratura sinistra (−X)
+  2: CINE_CAM_ANGLE - Math.atan2( 1, 0),   // serratura destra  (+X)
+  3: CINE_CAM_ANGLE - Math.atan2( 1, 0),   // pannello d'accesso (+X)
+};
+
 export class BombModel {
   constructor() {
     this.group = new THREE.Group();
@@ -36,6 +48,12 @@ export class BombModel {
     // Disinnesco progressivo: ogni soglia apre fisicamente un modulo
     this._defuseProgress = 0;
     this._defuseStage    = 0;    // 0..3 moduli disinnescati
+
+    // Rotazione attorno all'asse verticale (Y): guidata dal drag dell'utente e
+    // dalla presentazione automatica delle zone. X e Z restano sempre bloccati,
+    // così la bomba resta in piedi (si può "solo ruotare").
+    this._userRotY     = 0;
+    this._presentTween = null;   // tween che presenta la zona animata verso la camera
 
     this._buildScocca();
     this._buildSerrature();
@@ -286,17 +304,65 @@ export class BombModel {
       const k = this._defuseProgress;
       this.core.material.emissive.setRGB(1 - 0.9 * k, 0.07 + 0.85 * k, 0.05 + 0.15 * k);
     }
-    // Oscillazione: bloccata dopo l'esplosione per non resettare le parti volate via
+    // Rotazione SOLO attorno all'asse verticale (Y): X e Z bloccati a 0 così la
+    // bomba resta sempre in piedi. La rotazione utente/di-presentazione fa da base,
+    // l'oscillazione idle le si somma sopra. Bloccata dopo l'esplosione.
     if (!this._exploded) {
-      this.group.rotation.y = Math.sin(t * 0.22) * 0.04;
+      this.group.rotation.set(0, this._userRotY + Math.sin(t * 0.22) * 0.04, 0);
     }
+  }
+
+  // ── Rotazione interattiva (drag dell'utente sulla bomba) ─────────────────────
+  // Chiamato da InputManager. Solo yaw (radianti): la bomba gira attorno all'asse
+  // verticale. Pitch e roll sono bloccati (vedi update), quindi resta in piedi.
+  rotateBy(dyaw) {
+    if (this._exploded) return;
+    this._userRotY += dyaw;
+  }
+
+  // ── Presentazione della zona animata ─────────────────────────────────────────
+  // Prima che un modulo si apra, ruota la bomba (yaw) così la zona interessata
+  // guarda verso la camera della cinematica. durationMs ≈ durata del dolly-in,
+  // così la rotazione si completa mentre la camera arriva sulla bomba.
+  _presentZone(n, durationMs = 700) {
+    const base = STAGE_YAW[n];
+    if (base === undefined || this._exploded) return;
+
+    // Scegli la rappresentazione dell'angolo più vicina alla rotazione attuale:
+    // giro più breve, evita spin multipli se l'utente aveva già ruotato la bomba.
+    const twoPi  = Math.PI * 2;
+    const target = base + twoPi * Math.round((this._userRotY - base) / twoPi);
+
+    this._presentTween?.stop();
+    this._presentTween = new Tween(this)
+      .to({ _userRotY: target }, durationMs)
+      .easing(Easing.Cubic.InOut)
+      .start();
+  }
+
+  // ── Ritorno "dritta" ─────────────────────────────────────────────────────────
+  // Dopo che la cinematica ha mostrato l'apertura del modulo, riporta la bomba
+  // all'orientamento iniziale (fronte verso la camera, yaw ≡ 0). Sceglie il
+  // multiplo di 2π più vicino all'orientamento attuale → giro più breve, coerente
+  // con _presentZone (che ruota la zona verso la camera).
+  resetOrientation(durationMs = 700) {
+    if (this._exploded) return;
+    const twoPi  = Math.PI * 2;
+    const target = twoPi * Math.round(this._userRotY / twoPi);
+    this._presentTween?.stop();
+    this._presentTween = new Tween(this)
+      .to({ _userRotY: target }, durationMs)
+      .easing(Easing.Cubic.InOut)
+      .start();
   }
 
   // ── Disinnesco progressivo (soglie 25% / 50% / 75%) ──────────────────────────
   // Chiamato dal GameManager quando la barra DISINNESCO avanza. Ogni soglia
   // superata apre fisicamente un modulo (animazione gerarchica via tween.js).
   // Ritorna l'elenco degli stadi appena scattati (per audio/particelle).
-  setDefuseProgress(progress) {
+  // animDelayMs: posticipa l'apertura fisica del modulo — serve alla cinematica
+  // di camera per arrivare sulla bomba PRIMA che l'animazione scatti.
+  setDefuseProgress(progress, animDelayMs = 0) {
     if (this._exploded) return [];
     this._defuseProgress = Math.max(this._defuseProgress, Math.min(progress, 1));
 
@@ -305,10 +371,22 @@ export class BombModel {
     while (this._defuseStage < thresholds.length &&
            this._defuseProgress >= thresholds[this._defuseStage]) {
       this._defuseStage += 1;
-      this._playDefuseStage(this._defuseStage);
-      fired.push(this._defuseStage);
+      const stage = this._defuseStage;
+      // Ruota subito la bomba per presentare la zona alla camera: la rotazione
+      // dura quanto il dolly-in, così la zona è in quadro quando il modulo si apre.
+      this._presentZone(stage, animDelayMs > 0 ? animDelayMs : 700);
+      if (animDelayMs > 0) setTimeout(() => this._playDefuseStage(stage), animDelayMs);
+      else this._playDefuseStage(stage);
+      fired.push(stage);
     }
     return fired;
+  }
+
+  // Posizione (mondo) del modulo animato dallo stadio n — usata dal GameManager
+  // per centrare i burst di particelle sull'elemento che si sta aprendo.
+  getStageWorldPosition(n) {
+    const obj = n === 1 ? this.serratura1 : n === 2 ? this.serratura2 : this.pannelloGroup;
+    return obj ? obj.getWorldPosition(new THREE.Vector3()) : this.group.position.clone();
   }
 
   _playDefuseStage(n) {

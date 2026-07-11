@@ -345,8 +345,8 @@ export class HUD {
         <button id="btn-restart" class="btn">↻ Nuova Partita</button>
       </div>`;
 
-    // Lascia vedere l'animazione 3D (esplosione / spegnimento del Warden)
-    setTimeout(() => el.classList.add('visible'), won ? 1400 : 2100);
+    // Lascia vedere l'animazione 3D (cinematica dell'esplosione / spegnimento del Warden)
+    setTimeout(() => el.classList.add('visible'), won ? 1400 : 3200);
 
     el.querySelector('#btn-restart')?.addEventListener('click', () => {
       // Le animazioni della bomba sono irreversibili: il reload è il restart più pulito

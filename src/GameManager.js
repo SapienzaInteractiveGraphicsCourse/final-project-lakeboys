@@ -33,16 +33,24 @@ const ENEMY_TIMING = Object.freeze({
   CLEANUP_DELAY: 1500,  // le carte del nemico spariscono, torna il tuo turno
 });
 
+// Cinematica sulla bomba: la camera impiega CAM_IN ms ad arrivare; l'apertura
+// del modulo (e le particelle) partono in sincrono all'arrivo, poi la camera
+// indugia CAM_HOLD ms e torna alla vista precedente in CAM_OUT ms.
+const BOMB_CINE = Object.freeze({
+  CAM_IN: 750, CAM_HOLD: 1500, CAM_OUT: 850,
+});
+
 export class GameManager {
   constructor({
     hud, audio, effects, particles,
-    sceneManager, cardSystem, enemyAI, enemyModel, bombModel, jokerSystem,
+    sceneManager, roomModel, cardSystem, enemyAI, enemyModel, bombModel, jokerSystem,
   }) {
     this.hud        = hud;
     this.audio      = audio;
     this.effects    = effects;
     this.particles  = particles;
     this.scene      = sceneManager;
+    this.roomModel  = roomModel;
     this.cards      = cardSystem;
     this.enemyAI    = enemyAI;
     this.enemyModel = enemyModel;
@@ -147,18 +155,40 @@ export class GameManager {
 
     const won = this.state.applyPlayerScore(score);
     this.hud.floatGain(score.total, score.combo?.color ?? '#a4c46a', 'defuse');
-    this.scene.setVoltageProgress(this.state.defuseProgress);
+    // Indicatore di progresso: i tubi sul muro dietro il Warden si accendono
+    // dal basso verso l'alto man mano che sale il disinnesco.
+    this.roomModel?.setDefuseProgress?.(this.state.defuseProgress);
 
-    // Moduli della bomba: ogni 25% di progresso se ne apre uno fisicamente
-    const stages = this.bombModel?.setDefuseProgress?.(this.state.defuseProgress) ?? [];
+    // Moduli della bomba: ogni 25% di progresso se ne apre uno fisicamente.
+    // L'apertura è posticipata di CAM_IN ms: la cinematica porta la camera
+    // sulla bomba e il modulo scatta quando è in quadro.
+    const stages = this.bombModel?.setDefuseProgress?.(this.state.defuseProgress, BOMB_CINE.CAM_IN) ?? [];
     if (stages.length && !won) {
-      this.audio.stageDefused();
       this.hud.setStatus(`✓ Modulo ${stages[stages.length - 1]}/3 della bomba disinnescato`, '#a4c46a');
-      this.particles.burst({
-        position: this._bombTopPosition(), color: 0x66ffaa,
-        count: 44, speed: 3.2, life: 800,
-      });
-      this.effects.shake(0.03, 260);
+      this.scene.focusOnBomb?.({ inMs: BOMB_CINE.CAM_IN, holdMs: BOMB_CINE.CAM_HOLD, outMs: BOMB_CINE.CAM_OUT });
+      // Audio, shake e particelle sincronizzati sull'apertura di ciascun modulo,
+      // con i burst centrati sull'elemento che si sta aprendo (serratura/pannello)
+      stages.forEach((n, i) => setTimeout(() => {
+        this.audio.stageDefused();
+        this.effects.shake(0.03, 260);
+        this.particles.burst({
+          position: this.bombModel?.getStageWorldPosition?.(n) ?? this._bombTopPosition(),
+          color: 0x66ffaa, count: 46, speed: 3.4, life: 850, size: 0.09,
+        });
+        // Coda luminosa: secondo burst più morbido subito dopo lo scatto
+        setTimeout(() => this.particles.burst({
+          position: this.bombModel?.getStageWorldPosition?.(n) ?? this._bombTopPosition(),
+          color: 0xaaffdd, count: 22, speed: 1.8, life: 700, gravity: 2.2, size: 0.06,
+        }), 240);
+      }, BOMB_CINE.CAM_IN + 60 + i * 260));
+
+      // Mostrata l'apertura del modulo, la bomba torna dritta com'era all'inizio.
+      // Parte quando la camera inizia il dolly-out (fine dell'hold) e dura quanto
+      // il ritorno, così si raddrizza mentre si torna alla vista normale.
+      setTimeout(
+        () => this.bombModel?.resetOrientation?.(BOMB_CINE.CAM_OUT),
+        BOMB_CINE.CAM_IN + BOMB_CINE.CAM_HOLD,
+      );
     }
 
     // Le mani grosse scuotono la scena
@@ -270,18 +300,25 @@ export class GameManager {
     this.hud.setTurnBanner('✖ IL WARDEN HA VINTO', '#d95b38');
     this.cards.clearEnemyPlay();
     this.enemyModel?.triumph?.();
-    this.bombModel?.triggerDefuseFail?.(3);   // include il camera shake dell'esplosione
-    this.audio.explosion();
-    // Detriti incandescenti in due ondate
-    this.particles.burst({
-      position: this._bombTopPosition(), color: 0xff6622,
-      count: 70, speed: 6, life: 1300, gravity: 6, size: 0.11,
-    });
-    setTimeout(() => this.particles.burst({
-      position: this._bombTopPosition(), color: 0xffcc44,
-      count: 40, speed: 4, life: 1000, gravity: 5,
-    }), 200);
-    setTimeout(() => this.effects.flash('#d95b38', 0.9), 120);
+
+    // Cinematica: la camera corre sulla bomba, la detonazione parte quando è
+    // in quadro (hold più lungo: l'esplosione dura ~1.1 s + detriti).
+    this.scene.focusOnBomb?.({ inMs: 620, holdMs: 2200, outMs: 950 });
+    setTimeout(() => {
+      this.bombModel?.triggerDefuseFail?.(3);   // include il camera shake dell'esplosione
+      this.audio.explosion();
+      // Detriti incandescenti in due ondate
+      this.particles.burst({
+        position: this._bombTopPosition(), color: 0xff6622,
+        count: 70, speed: 6, life: 1300, gravity: 6, size: 0.11,
+      });
+      setTimeout(() => this.particles.burst({
+        position: this._bombTopPosition(), color: 0xffcc44,
+        count: 40, speed: 4, life: 1000, gravity: 5,
+      }), 200);
+      setTimeout(() => this.effects.flash('#d95b38', 0.9), 120);
+    }, 640);
+
     this._refreshActions(0);
     this._showEnd(false);
   }

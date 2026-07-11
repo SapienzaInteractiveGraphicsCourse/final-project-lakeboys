@@ -12,7 +12,7 @@ import { Tween, Easing } from '@tweenjs/tween.js';
 import { BOMB_POS } from '../scene/config.js';
 
 export class InputManager {
-  constructor({ camera, renderer, cardSystem, gameManager, sceneManager, audio, hud, jokerSystem, particles }) {
+  constructor({ camera, renderer, cardSystem, gameManager, sceneManager, audio, hud, jokerSystem, particles, bombModel }) {
     this.camera       = camera;
     this.renderer     = renderer;
     this.cardSystem   = cardSystem;
@@ -22,6 +22,7 @@ export class InputManager {
     this.hud          = hud;
     this.jokerSystem  = jokerSystem;    // picking dei joker in fase di scelta
     this.particles    = particles;      // scintille sugli impatti delle carte
+    this.bombModel    = bombModel;      // click → cinematica · drag → rotazione
 
     // REQUIRES: THREE.Raycaster — unico punto di interazione mouse ↔ scena 3D
     this.raycaster = new THREE.Raycaster();
@@ -33,6 +34,7 @@ export class InputManager {
 
     // Stato drag-rotate
     this._dragCard      = null;
+    this._dragBomb      = false;   // true mentre si ruota la bomba col drag
     this._dragLast      = { x: 0, y: 0 };
     this._dragMoved     = false;   // true se il mouse si è spostato abbastanza → non è un click
     this._mouseDownPos  = { x: 0, y: 0 };
@@ -137,6 +139,14 @@ export class InputManager {
     return obj?.userData?.cardRef ?? null;
   }
 
+  // REQUIRES: THREE.Raycaster — picking della bomba (qualsiasi mesh della gerarchia)
+  _hitBomb(event) {
+    if (!this.bombModel?.group) return false;
+    this._toNDC(event);
+    this.raycaster.setFromCamera(this.mouseNDC, this.camera);
+    return this.raycaster.intersectObject(this.bombModel.group, true).length > 0;
+  }
+
   // REQUIRES: THREE.Raycaster — picking dei joker durante la fase di scelta
   _hitJoker(event) {
     this._toNDC(event);
@@ -154,19 +164,31 @@ export class InputManager {
 
   _onMouseDown(event) {
     if (event.button !== 0) return;
+
     const hit = this._hitCard(event);
-    if (!hit || hit.isPlaying) return;
+    if (hit && !hit.isPlaying) {
+      this._dragCard = hit;
+      this._dragLast = { x: event.clientX, y: event.clientY };
+      this._mouseDownPos = { x: event.clientX, y: event.clientY };
+      this._dragMoved = false;
 
-    this._dragCard = hit;
-    this._dragLast = { x: event.clientX, y: event.clientY };
-    this._mouseDownPos = { x: event.clientX, y: event.clientY };
-    this._dragMoved = false;
+      // Blocca la camera mentre si ruota la carta
+      if (this.sceneManager?.controls) this.sceneManager.controls.enabled = false;
 
-    // Blocca la camera mentre si ruota la carta
-    if (this.sceneManager?.controls) this.sceneManager.controls.enabled = false;
+      // Interrompi eventuali tween attivi sulla carta
+      this._stopTweens(hit.group);
+      return;
+    }
 
-    // Interrompi eventuali tween attivi sulla carta
-    this._stopTweens(hit.group);
+    // Non è una carta: se è la bomba, avvia il drag-rotate della bomba
+    // (escluso durante la scelta del joker, dove il mousemove guida l'hover).
+    if (!this.jokerSystem?.isChoosing && this._hitBomb(event)) {
+      this._dragBomb = true;
+      this._dragLast = { x: event.clientX, y: event.clientY };
+      this._mouseDownPos = { x: event.clientX, y: event.clientY };
+      this._dragMoved = false;
+      if (this.sceneManager?.controls) this.sceneManager.controls.enabled = false;
+    }
   }
 
   // ── Mouse Move — hover + drag-rotate ────────────────────────────────────
@@ -198,6 +220,20 @@ export class InputManager {
       return;
     }
 
+    // Modalità drag-rotate della bomba: solo il movimento orizzontale la fa
+    // ruotare (yaw). Pitch e roll sono bloccati → la bomba resta sempre in piedi.
+    if (this._dragBomb) {
+      const dx = event.clientX - this._dragLast.x;
+
+      const totalDx = event.clientX - this._mouseDownPos.x;
+      const totalDy = event.clientY - this._mouseDownPos.y;
+      if (Math.abs(totalDx) > 4 || Math.abs(totalDy) > 4) this._dragMoved = true;
+
+      this.bombModel?.rotateBy(dx * 0.012);
+      this._dragLast = { x: event.clientX, y: event.clientY };
+      return;
+    }
+
     // Hover normale
     const hit = this._hitCard(event);
 
@@ -212,13 +248,26 @@ export class InputManager {
       this._tweenHover(hit);
     }
 
-    this.renderer.domElement.style.cursor =
-      hit && !hit.isPlaying ? 'pointer' : 'default';
+    // Cursore: carta → pointer, bomba → grab (afferra per ruotare), altrimenti default
+    if (hit && !hit.isPlaying) {
+      this.renderer.domElement.style.cursor = 'pointer';
+    } else if (this._hitBomb(event)) {
+      this.renderer.domElement.style.cursor = 'grab';
+    } else {
+      this.renderer.domElement.style.cursor = 'default';
+    }
   }
 
   // ── Mouse Up — rilascia la carta e torna in posizione ───────────────────
 
   _onMouseUp(event) {
+    // Rilascio del drag-rotate della bomba: riattiva la camera
+    if (this._dragBomb) {
+      this._dragBomb = false;
+      if (this.sceneManager?.controls) this.sceneManager.controls.enabled = true;
+      return;
+    }
+
     if (!this._dragCard) return;
     const card = this._dragCard;
     this._dragCard = null;
@@ -297,6 +346,13 @@ export class InputManager {
         this.hud?.showJokerTooltip(null);   // la scelta è fatta: via il tooltip
         this.renderer.domElement.style.cursor = 'default';
       }
+      return;
+    }
+
+    // Click sulla bomba (in qualsiasi momento): cinematica di focus sulla bomba.
+    // focusOnBomb() ignora la chiamata se una cinematica è già in corso.
+    if (this._hitBomb(event)) {
+      this.sceneManager?.focusOnBomb?.();
       return;
     }
 

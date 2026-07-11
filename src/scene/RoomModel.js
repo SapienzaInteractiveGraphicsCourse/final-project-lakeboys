@@ -19,6 +19,12 @@ export class RoomModel {
     this.workLights = [];   // { bulb, light, phase } — fanno flicker in update()
     this.hazardRing = null; // anello pulsante attorno alla bomba
 
+    // Tubi sul muro di fondo (dietro il Warden) usati come INDICATORE di disinnesco:
+    // si accendono dal basso verso l'alto man mano che sale il progresso.
+    this.progressPipes   = [];   // { mat, threshold }
+    this.pipeLight       = null; // luce verde che ramp-a col progresso
+    this._defuseProgress = 0;
+
     this._buildFloor();
     this._buildWalls();
     this._buildCeiling();
@@ -103,18 +109,31 @@ export class RoomModel {
     const pipeMat = new THREE.MeshStandardMaterial({ color: 0x3a3d33, roughness: 0.45, metalness: 0.85 });
     const rustMat = new THREE.MeshStandardMaterial({ color: 0x5a2f1a, roughness: 0.8, metalness: 0.4 });
 
-    [1.4, 3.2, 5.0].forEach((y, idx) => {
-      const len = ROOM_HALF_W * 2 - 2;
+    // I 3 tubi orizzontali fungono da INDICATORE di progresso: ognuno ha una soglia
+    // crescente col numero (il più in basso si accende per primo) e un colore
+    // proprio — rosso, blu, verde — così si distinguono anche da spenti (tint).
+    const PIPE_Y      = [1.4, 3.2, 5.0];
+    const PIPE_COLORS = [0xff3344, 0x3388ff, 0x33ff88];
+    PIPE_Y.forEach((y, idx) => {
+      const len   = ROOM_HALF_W * 2 - 2;
+      const color = PIPE_COLORS[idx];
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x24271f, roughness: 0.5, metalness: 0.85,
+        emissive: color, emissiveIntensity: 0.0,
+      });
       const pipe = new THREE.Mesh(
         new THREE.CylinderGeometry(0.16 - idx * 0.02, 0.16 - idx * 0.02, len, 14),
-        idx === 1 ? rustMat : pipeMat
+        mat,
       );
       pipe.rotation.z = Math.PI / 2;
       pipe.position.set(0, y, ROOM_BACK_Z + 0.7);
       pipe.castShadow = true;
       this.group.add(pipe);
 
-      // Flange/anelli lungo il tubo
+      // soglia: tubo 0 → 0.00, tubo 1 → 0.33, tubo 2 → 0.67 (fill dal basso)
+      this.progressPipes.push({ mat, color, threshold: idx / PIPE_Y.length });
+
+      // Flange/anelli lungo il tubo (decorative, statiche)
       for (let x = -len / 2 + 1; x <= len / 2 - 1; x += 3.2) {
         const flange = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.12, 14), pipeMat);
         flange.rotation.z = Math.PI / 2;
@@ -122,6 +141,12 @@ export class RoomModel {
         this.group.add(flange);
       }
     });
+
+    // Luce che illumina il muro dietro il Warden: intensità ramp col progresso,
+    // colore = quello del tubo attualmente più attivo (segue rosso→blu→verde).
+    this.pipeLight = new THREE.PointLight(PIPE_COLORS[0], 0, 18, 2);
+    this.pipeLight.position.set(0, 3.2, ROOM_BACK_Z + 1.6);
+    this.group.add(this.pipeLight);
 
     // Valvola a volantino (dettaglio scenico)
     const valveBody = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.4, 12), pipeMat);
@@ -254,6 +279,11 @@ export class RoomModel {
     this.group.add(dot);
   }
 
+  // ── API: progresso di disinnesco [0,1] → accende i tubi sul muro di fondo ────
+  setDefuseProgress(progress) {
+    this._defuseProgress = Math.max(0, Math.min(1, progress || 0));
+  }
+
   // ── Update per frame ────────────────────────────────────────────────────────
   // REQUIRES: Procedural animation — flicker delle luci + pulsazione dell'anello
   update(t) {
@@ -266,6 +296,21 @@ export class RoomModel {
     if (this.hazardRing) {
       const pulse = 0.6 + 0.6 * Math.abs(Math.sin(t * 2.2));
       this.hazardRing.material.emissiveIntensity = pulse * 1.6;
+    }
+
+    // Tubi-indicatore sul muro di fondo: ogni tubo si attiva gradualmente oltre la
+    // sua soglia e pulsa proceduralmente ("energia che scorre"). La luce dietro il
+    // Warden segue il colore del tubo più attivo (rosso → blu → verde).
+    let maxAct = 0, maxColor = null;
+    this.progressPipes.forEach(pp => {
+      const act   = Math.max(0, Math.min(1, (this._defuseProgress - pp.threshold) / 0.34));
+      const pulse = 0.7 + 0.3 * Math.sin(t * 3.4 + pp.threshold * 8);
+      pp.mat.emissiveIntensity = act > 0 ? 1.7 * pulse * act : 0.0;
+      if (act > maxAct) { maxAct = act; maxColor = pp.color; }
+    });
+    if (this.pipeLight) {
+      this.pipeLight.intensity = maxAct * 7;
+      if (maxColor !== null) this.pipeLight.color.setHex(maxColor);
     }
   }
 }
