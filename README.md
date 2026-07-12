@@ -18,7 +18,7 @@ straightens back. If the Warden wins, the whole hierarchical model blows apart
 in a radial explosion.
 
 > Final project for the **Interactive Graphics** course — Sapienza University of
-> Rome. The in-game interface is in Italian.
+> Rome. The in-game interface is in Italian / English, selectable from the menu.
 
 ![Third-person view: the hand fanned on the workbench, the deck on the right, the bomb on its hazard platform on the left, the Warden hovering behind the bench](docs/screenshots/fig_hand.jpg)
 
