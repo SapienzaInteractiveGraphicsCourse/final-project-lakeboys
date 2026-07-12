@@ -20,6 +20,19 @@ in a radial explosion.
 > Final project for the **Interactive Graphics** course — Sapienza University of
 > Rome. The in-game interface is in Italian.
 
+![Third-person view: the hand fanned on the workbench, the deck on the right, the bomb on its hazard platform on the left, the Warden hovering behind the bench](docs/screenshots/fig_hand.jpg)
+
+---
+
+## Screenshots
+
+| | |
+|:---:|:---:|
+| ![The Warden plays a Full House: its cards line up in a floating fan](docs/screenshots/fig_warden.jpg) | ![Bomb at 75%+ defuse: locks open, access panel slid out, LED green](docs/screenshots/fig_bomb.jpg) |
+| *The Warden plays a real Full House* | *Bomb at 75% defused: locks open, panel out* |
+| ![First-person view: the card fan seen from the operator's eyes](docs/screenshots/fig_first.jpg) | ![Opening phase: three joker objects on the bench, picked with the raycaster](docs/screenshots/fig_jokers.jpg) |
+| *First-person view (key V)* | *Joker choice at game start* |
+
 ---
 
 ## How to play
