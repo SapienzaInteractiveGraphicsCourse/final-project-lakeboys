@@ -8,42 +8,48 @@
 //
 // Ogni joker espone apply(score, cards) → { chips?, mult?, note } | null:
 //   ritorna il bonus se la condizione è soddisfatta, altrimenti null.
+//
+// name/desc sono getter localizzati (core/i18n.js): leggendoli al momento del
+// render restituiscono sempre la stringa nella lingua attiva. La `note` viene
+// tradotta al momento del calcolo (viene mostrata subito dopo nel reveal).
+
+import { t } from './i18n.js';
 
 export const JOKERS = [
   {
     id: 'multimetro',
-    name: 'MULTIMETRO',
     color: 0xe5ae32,
-    desc: '+3 mult se giochi COPPIA o DOPPIA COPPIA',
+    get name() { return t('joker.multimetro.name'); },
+    get desc() { return t('joker.multimetro.desc'); },
     apply(score) {
       const n = score.combo?.name;
       if (n === 'COPPIA' || n === 'DOPPIA COPPIA') {
-        return { mult: 3, note: 'MULTIMETRO +3 mult' };
+        return { mult: 3, note: t('joker.multimetro.note', { n: 3 }) };
       }
       return null;
     },
   },
   {
     id: 'bobina',
-    name: 'BOBINA TESLA',
     color: 0x93aabb,
-    desc: '+6 chips per ogni carta VOLT giocata',
+    get name() { return t('joker.bobina.name'); },
+    get desc() { return t('joker.bobina.desc'); },
     apply(score, cards) {
       const volts = cards.filter(c => c.suit === 'volt').length;
       if (volts > 0) {
-        return { chips: volts * 6, note: `BOBINA +${volts * 6} chips` };
+        return { chips: volts * 6, note: t('joker.bobina.note', { n: volts * 6 }) };
       }
       return null;
     },
   },
   {
     id: 'lente',
-    name: 'LENTE DI FOCUS',
     color: 0xa4c46a,
-    desc: '+45 chips se giochi una mano di 5 carte',
+    get name() { return t('joker.lente.name'); },
+    get desc() { return t('joker.lente.desc'); },
     apply(score, cards) {
       if (cards.length === 5) {
-        return { chips: 45, note: 'LENTE +45 chips' };
+        return { chips: 45, note: t('joker.lente.note') };
       }
       return null;
     },

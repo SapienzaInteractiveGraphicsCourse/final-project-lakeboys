@@ -18,7 +18,7 @@
   <div id="hud">
     <!-- Barra del GIOCATORE -->
     <div id="player-panel" class="panel">
-      <div class="panel-label">Tu · Disinnesco</div>
+      <div class="panel-label" data-i18n="panel.you">Tu · Disinnesco</div>
       <div id="defuse-value" class="meter-value">0 / 1400</div>
       <div class="bar-wrap"><div id="defuse-bar-fill" class="bar-fill"></div></div>
     </div>
@@ -31,7 +31,7 @@
 
     <!-- Barra del WARDEN -->
     <div id="warden-panel" class="panel">
-      <div class="panel-label">Warden · Sovraccarico</div>
+      <div class="panel-label" data-i18n="panel.warden">Warden · Sovraccarico</div>
       <div id="overcharge-value" class="meter-value">0 / 1600</div>
       <div class="bar-wrap"><div id="overcharge-bar-fill" class="bar-fill"></div></div>
       <div id="threat-value">Minaccia ×1.00</div>
@@ -42,8 +42,9 @@
     <div id="turn-indicator">► TUO TURNO</div>
     <div id="status-label">■ Sistema attivo — disinnesca prima che il Warden detoni</div>
     <div id="top-buttons">
-      <button id="btn-view" class="btn small">👁 3ª Persona</button>
-      <button id="btn-mute" class="btn small">🔊 Audio</button>
+      <button id="btn-lang" class="btn small" title="Language / Lingua">🌐 EN</button>
+      <button id="btn-view" class="btn small" data-i18n="btn.view3">👁 3ª Persona</button>
+      <button id="btn-mute" class="btn small" data-i18n="btn.audioOn">🔊 Audio</button>
     </div>
 
     <!-- Reveal del punteggio (stile Balatro) -->
@@ -52,7 +53,7 @@
     <!-- Zona azione -->
     <div id="bottom-center">
       <div id="combo-name"></div>
-      <div id="selected-info">Seleziona da 1 a 5 carte, poi <b>GIOCA</b></div>
+      <div id="selected-info" data-i18n-html="hud.selectPrompt">Seleziona da 1 a 5 carte, poi <b>GIOCA</b></div>
       <div id="meta-row">
         <span id="turn-count">Turno 1</span>
         <span id="discards-left">♻ Scarti 3/3</span>
@@ -60,25 +61,25 @@
         <span id="deck-count">🂠 Mazzo 32</span>
       </div>
       <div id="action-row">
-        <button id="btn-discard" class="btn" disabled>♻ Scarta</button>
-        <button id="btn-sort" class="btn">⇅ Valore</button>
-        <button id="btn-hint" class="btn">💡 Aiuto</button>
-        <button id="btn-play" class="btn" disabled>⚡ Gioca</button>
+        <button id="btn-discard" class="btn" disabled data-i18n="btn.discard">♻ Scarta</button>
+        <button id="btn-sort" class="btn" data-i18n="btn.sortValue">⇅ Valore</button>
+        <button id="btn-hint" class="btn" data-i18n="btn.hint">💡 Aiuto</button>
+        <button id="btn-play" class="btn" disabled data-i18n="btn.play">⚡ Gioca</button>
       </div>
     </div>
 
     <!-- Legenda combo (data-combo = nome usato da core/combos.js) -->
     <div id="combo-legend">
-      <div class="title">Mani · chips × mult</div>
-      <div class="row" data-combo="SCALA COLORE"><span>Scala Colore</span><span class="mult">100 ×8</span></div>
-      <div class="row" data-combo="POKER"><span>Poker</span><span class="mult">60 ×7</span></div>
-      <div class="row" data-combo="FULL"><span>Full</span><span class="mult">40 ×4</span></div>
-      <div class="row" data-combo="COLORE"><span>Colore</span><span class="mult">35 ×4</span></div>
-      <div class="row" data-combo="SCALA"><span>Scala</span><span class="mult">30 ×4</span></div>
-      <div class="row" data-combo="TRIS"><span>Tris</span><span class="mult">30 ×3</span></div>
-      <div class="row" data-combo="DOPPIA COPPIA"><span>Doppia Coppia</span><span class="mult">20 ×2</span></div>
-      <div class="row" data-combo="COPPIA"><span>Coppia</span><span class="mult">10 ×2</span></div>
-      <div class="row" data-combo="CARTA ALTA"><span>Carta Alta</span><span class="mult">5 ×1</span></div>
+      <div class="title" data-i18n="legend.title">Mani · chips × mult</div>
+      <div class="row" data-combo="SCALA COLORE"><span data-i18n="combo.SCALA COLORE">Scala Colore</span><span class="mult">100 ×8</span></div>
+      <div class="row" data-combo="POKER"><span data-i18n="combo.POKER">Poker</span><span class="mult">60 ×7</span></div>
+      <div class="row" data-combo="FULL"><span data-i18n="combo.FULL">Full</span><span class="mult">40 ×4</span></div>
+      <div class="row" data-combo="COLORE"><span data-i18n="combo.COLORE">Colore</span><span class="mult">35 ×4</span></div>
+      <div class="row" data-combo="SCALA"><span data-i18n="combo.SCALA">Scala</span><span class="mult">30 ×4</span></div>
+      <div class="row" data-combo="TRIS"><span data-i18n="combo.TRIS">Tris</span><span class="mult">30 ×3</span></div>
+      <div class="row" data-combo="DOPPIA COPPIA"><span data-i18n="combo.DOPPIA COPPIA">Doppia Coppia</span><span class="mult">20 ×2</span></div>
+      <div class="row" data-combo="COPPIA"><span data-i18n="combo.COPPIA">Coppia</span><span class="mult">10 ×2</span></div>
+      <div class="row" data-combo="CARTA ALTA"><span data-i18n="combo.CARTA ALTA">Carta Alta</span><span class="mult">5 ×1</span></div>
     </div>
 
     <div id="phase-label">DEFUSE-DECK 3D</div>
@@ -90,30 +91,33 @@
   <!-- ── Tutorial iniziale ── -->
   <div id="tutorial">
     <div class="card">
+      <div id="lang-row">
+        <button id="btn-lang-tut" class="lang-btn" title="Language / Lingua">🌐 Italiano</button>
+      </div>
       <h1>DEFUSE-DECK</h1>
-      <div class="sub">Duello di carte contro il Warden</div>
+      <div class="sub" data-i18n="tut.sub">Duello di carte contro il Warden</div>
       <ul>
-        <li><span class="ic">🎯</span><span>Carica la barra <b>DISINNESCO</b> fino a <span class="accent">1400</span> per disarmare la bomba e <b>vincere</b>.</span></li>
-        <li class="warn"><span class="ic">💀</span><span>Il <b>Warden gioca le sue carte</b> dopo di te e carica il <b>SOVRACCARICO</b>: se arriva a 1600, la bomba <b>esplode</b>. E ad ogni turno diventa <b>più aggressivo</b>.</span></li>
-        <li><span class="ic">🃏</span><span>Hai 8 carte. <b>Clicca</b> da 1 a 5 carte per formare una mano di poker: vale <span class="accent">chips × mult</span>.</span></li>
-        <li><span class="ic">♻</span><span>Premi <b>Scarta</b> per cambiare le carte selezionate (3 scarti per turno) e cercare combo migliori.</span></li>
-        <li><span class="ic">💡</span><span>In difficoltà? <b>Aiuto</b> seleziona la miglior mano possibile (2 usi per partita).</span></li>
-        <li><span class="ic">🔧</span><span>All'inizio <b>scegli un Joker</b> tra 3 oggetti sul banco: modifica il punteggio per tutta la partita.</span></li>
-        <li><span class="ic">🖱️</span><span>Trascina col mouse per <b>ruotare la visuale</b>; trascina una carta per ispezionarla.</span></li>
+        <li><span class="ic">🎯</span><span data-i18n-html="tut.li1">Carica la barra <b>DISINNESCO</b> fino a <span class="accent">1400</span> per disarmare la bomba e <b>vincere</b>.</span></li>
+        <li class="warn"><span class="ic">💀</span><span data-i18n-html="tut.li2">Il <b>Warden gioca le sue carte</b> dopo di te e carica il <b>SOVRACCARICO</b>: se arriva a 1600, la bomba <b>esplode</b>. E ad ogni turno diventa <b>più aggressivo</b>.</span></li>
+        <li><span class="ic">🃏</span><span data-i18n-html="tut.li3">Hai 8 carte. <b>Clicca</b> da 1 a 5 carte per formare una mano di poker: vale <span class="accent">chips × mult</span>.</span></li>
+        <li><span class="ic">♻</span><span data-i18n-html="tut.li4">Premi <b>Scarta</b> per cambiare le carte selezionate (3 scarti per turno) e cercare combo migliori.</span></li>
+        <li><span class="ic">💡</span><span data-i18n-html="tut.li5">In difficoltà? <b>Aiuto</b> seleziona la miglior mano possibile (2 usi per partita).</span></li>
+        <li><span class="ic">🔧</span><span data-i18n-html="tut.li6">All'inizio <b>scegli un Joker</b> tra 3 oggetti sul banco: modifica il punteggio per tutta la partita.</span></li>
+        <li><span class="ic">🖱️</span><span data-i18n-html="tut.li7">Trascina col mouse per <b>ruotare la visuale</b>; trascina una carta per ispezionarla.</span></li>
       </ul>
       <div id="difficulty-row">
-        <span class="diff-label">Difficoltà</span>
+        <span class="diff-label" data-i18n="tut.diffLabel">Difficoltà</span>
         <div class="diff-buttons">
-          <button class="diff-btn" data-diff="recruit">Recluta</button>
-          <button class="diff-btn active" data-diff="standard">Artificiere</button>
-          <button class="diff-btn" data-diff="veteran">Veterano</button>
+          <button class="diff-btn" data-diff="recruit" data-i18n="difficulty.recruit">Recluta</button>
+          <button class="diff-btn active" data-diff="standard" data-i18n="difficulty.standard">Artificiere</button>
+          <button class="diff-btn" data-diff="veteran" data-i18n="difficulty.veteran">Veterano</button>
         </div>
       </div>
-      <div class="keys">
+      <div class="keys" data-i18n-html="tut.keys">
         <kbd>1</kbd>–<kbd>8</kbd> seleziona carta &nbsp;·&nbsp; <kbd>Invio</kbd> gioca &nbsp;·&nbsp; <kbd>X</kbd> scarta &nbsp;·&nbsp; <kbd>S</kbd> ordina<br />
         <kbd>H</kbd> aiuto &nbsp;·&nbsp; <kbd>V</kbd> visuale &nbsp;·&nbsp; <kbd>M</kbd> audio
       </div>
-      <button id="btn-start">⚡ Inizia</button>
+      <button id="btn-start" data-i18n="tut.start">⚡ Inizia</button>
     </div>
   </div>
 

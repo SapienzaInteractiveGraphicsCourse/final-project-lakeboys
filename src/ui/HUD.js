@@ -6,6 +6,8 @@
 //
 // Nessuna logica di gioco: l'HUD legge il GameState e reagisce ai suoi eventi.
 
+import { t, comboLabel } from '../core/i18n.js';
+
 const $ = (id) => document.getElementById(id);
 
 export class HUD {
@@ -43,6 +45,27 @@ export class HUD {
     };
 
     this._tooltipDef = null;   // def del joker attualmente nel tooltip
+
+    // Stato minimo per la ri-localizzazione live (cambio lingua a partita in corso)
+    this._activeJoker   = null;
+    this._lastSelection = null;   // { score, count }
+    this._lastThreat    = null;
+    this._sortMode      = 'value';
+    this._muted         = false;
+    this._view          = 'third';
+  }
+
+  // ── Ri-localizzazione (cambio lingua runtime) ──────────────────────────────
+  // Ricalcola le stringhe possedute dall'HUD nella lingua attiva. Banner e stato
+  // di GameManager vengono ri-applicati separatamente da lui.
+  relocalize() {
+    this.updateMeters();
+    if (this._lastThreat != null) this.setThreat(this._lastThreat);
+    this.setSortLabel(this._sortMode);
+    this.setMuteLabel(this._muted);
+    this.setViewLabel(this._view);
+    if (this._activeJoker) this.setJoker(this._activeJoker);
+    if (this._lastSelection) this.showSelection(this._lastSelection.score, this._lastSelection.count);
   }
 
   // ── Tooltip joker (fase di scelta): segue il cursore ────────────────────────
@@ -63,10 +86,10 @@ export class HUD {
       this._tooltipDef = def;
       const css = '#' + def.color.toString(16).padStart(6, '0');
       el.innerHTML =
-        `<div class="jt-label">Joker</div>` +
+        `<div class="jt-label">${t('joker.tooltipLabel')}</div>` +
         `<div class="jt-name" style="color:${css}">${def.name}</div>` +
         `<div class="jt-desc">${def.desc}</div>` +
-        `<div class="jt-hint">Clicca per equipaggiarlo</div>`;
+        `<div class="jt-hint">${t('joker.equipHint')}</div>`;
       el.style.borderLeftColor = css;
     }
 
@@ -87,9 +110,10 @@ export class HUD {
   setJoker(def) {
     const el = this.el.jokerInfo;
     if (!el || !def) return;
+    this._activeJoker = def;
     const css = '#' + def.color.toString(16).padStart(6, '0');
     el.innerHTML =
-      `<div class="jk-label">Joker attivo</div>` +
+      `<div class="jk-label">${t('joker.activeLabel')}</div>` +
       `<div class="jk-name" style="color:${css}">${def.name}</div>` +
       `<div class="jk-desc">${def.desc}</div>`;
     el.style.borderColor = css + '55';
@@ -103,7 +127,7 @@ export class HUD {
     state.on('overcharge', () => this.updateMeters());
     state.on('turn',       ({ turn }) => {
       this.updateMeters();
-      this.setTurnBanner(`► TUO TURNO`, '#a4c46a');
+      this.setTurnBanner(t('banner.yourTurn'), '#a4c46a');
       this.pulseTurnBanner();
     });
     state.on('discard',    () => this.updateMeters());
@@ -122,20 +146,21 @@ export class HUD {
     if (this.el.defuseBar)     this.el.defuseBar.style.width     = `${s.defuseProgress * 100}%`;
     if (this.el.overchargeBar) this.el.overchargeBar.style.width = `${s.overchargeProgress * 100}%`;
 
-    this._text(this.el.turnCount,    `Turno ${s.turn}`);
-    this._text(this.el.discardsLeft, `♻ Scarti ${s.discardsLeft}/${s.rules.DISCARDS_PER_TURN}`);
-    this._text(this.el.hintsLeft,    `💡 Aiuti ${s.suggestionsLeft}/${s.rules.SUGGESTIONS_PER_GAME}`);
+    this._text(this.el.turnCount,    t('hud.turn', { n: s.turn }));
+    this._text(this.el.discardsLeft, t('hud.discards', { n: s.discardsLeft, m: s.rules.DISCARDS_PER_TURN }));
+    this._text(this.el.hintsLeft,    t('hud.hints', { n: s.suggestionsLeft, m: s.rules.SUGGESTIONS_PER_GAME }));
 
     if (extra.deck !== undefined) {
-      this._text(this.el.deckCount, `🂠 Mazzo ${extra.deck}`);
+      this._text(this.el.deckCount, t('hud.deck', { n: extra.deck }));
     }
   }
 
-  setDeckCount(count) { this._text(this.el.deckCount, `🂠 Mazzo ${count}`); }
+  setDeckCount(count) { this._text(this.el.deckCount, t('hud.deck', { n: count })); }
 
   setThreat(mult) {
     if (!this.el.threatValue) return;
-    this.el.threatValue.textContent = `Minaccia ×${mult.toFixed(2)}`;
+    this._lastThreat = mult;
+    this.el.threatValue.textContent = t('meter.threat', { v: mult.toFixed(2) });
     const hot = mult >= 1.4;
     this.el.threatValue.classList.toggle('threat-hot', hot);
   }
@@ -169,8 +194,10 @@ export class HUD {
     const cb   = this.el.comboName;
     if (!info) return;
 
+    this._lastSelection = { score, count };
+
     if (!count) {
-      info.innerHTML = 'Seleziona da 1 a 5 carte, poi <b>GIOCA</b>';
+      info.innerHTML = t('hud.selectPrompt');
       info.style.color = '#98927f';
       if (cb) cb.textContent = '';
       this.highlightLegend(null);
@@ -184,7 +211,7 @@ export class HUD {
     info.style.color = '#d8cfb8';
 
     if (cb && score.combo) {
-      cb.textContent = score.combo.name;
+      cb.textContent = comboLabel(score.combo.name);
       cb.style.color = score.combo.color;
     }
     this.highlightLegend(score.combo?.name ?? null);
@@ -214,7 +241,7 @@ export class HUD {
       }).join(' · ');
 
       el.innerHTML =
-        `<div class="sr-combo" style="color:${color}">${score.combo?.name ?? ''}</div>` +
+        `<div class="sr-combo" style="color:${color}">${score.combo ? comboLabel(score.combo.name) : ''}</div>` +
         `<div class="sr-math">` +
           `<span class="sr-chips">0</span><span class="sr-x">×</span>` +
           `<span class="sr-mult">0</span><span class="sr-eq">=</span>` +
@@ -262,9 +289,9 @@ export class HUD {
     if (!el) return;
     const c = play.combo?.color ?? '#d95b38';
     el.innerHTML =
-      `<div class="er-label">IL WARDEN HA CALATO</div>` +
-      `<div class="er-combo" style="color:${c}">${play.combo?.name ?? '—'}</div>` +
-      `<div class="er-damage">+${play.damage} sovraccarico</div>`;
+      `<div class="er-label">${t('enemy.played')}</div>` +
+      `<div class="er-combo" style="color:${c}">${play.combo ? comboLabel(play.combo.name) : '—'}</div>` +
+      `<div class="er-damage">${t('enemy.overcharge', { n: play.damage })}</div>`;
   }
 
   // ── Numerino "+X" che sale dalla barra ──────────────────────────────────────
@@ -289,7 +316,7 @@ export class HUD {
     el.style.opacity = String(Math.max(0, (level - 0.45) * 1.6));
     el.classList.toggle('critical', level >= 0.7);
     if (entered) {
-      this.setStatus('⚠ SOVRACCARICO CRITICO — chiudi la partita in fretta', '#d95b38');
+      this.setStatus(t('danger.critical'), '#d95b38');
     }
   }
 
@@ -301,15 +328,18 @@ export class HUD {
   }
 
   setSortLabel(mode) {
-    this._text(this.el.btnSort, mode === 'value' ? '⇅ Valore' : '⇅ Seme');
+    this._sortMode = mode;
+    this._text(this.el.btnSort, t(mode === 'value' ? 'btn.sortValue' : 'btn.sortSuit'));
   }
 
   setMuteLabel(muted) {
-    this._text(this.el.btnMute, muted ? '🔇 Audio' : '🔊 Audio');
+    this._muted = muted;
+    this._text(this.el.btnMute, t(muted ? 'btn.audioOff' : 'btn.audioOn'));
   }
 
   setViewLabel(view) {
-    this._text(this.el.btnView, view === 'first' ? '👁 1ª Persona' : '👁 3ª Persona');
+    this._view = view;
+    this._text(this.el.btnView, t(view === 'first' ? 'btn.view1' : 'btn.view3'));
   }
 
   hideTutorial() {
@@ -321,14 +351,13 @@ export class HUD {
     const el = this.el.endOverlay;
     if (!el) return;
 
-    const title = won ? '◆ BOMBA DISINNESCATA ◆' : '✖ DETONAZIONE ✖';
-    const sub   = won
-      ? 'Hai riempito la barra di disinnesco prima del Warden.'
-      : 'Il sovraccarico del Warden ha fatto detonare la bomba.';
+    const title = won ? t('end.win.title') : t('end.lose.title');
+    const sub   = won ? t('end.win.sub') : t('end.lose.sub');
+    const bestHandName = stats.bestHandName ? comboLabel(stats.bestHandName) : t('end.none');
 
     const extraRows =
-      (difficultyName ? `<div class="stat"><span class="stat-label">Difficoltà</span><span class="stat-value">${difficultyName}</span></div>` : '') +
-      (jokerName ? `<div class="stat"><span class="stat-label">Joker</span><span class="stat-value">${jokerName}</span></div>` : '');
+      (difficultyName ? `<div class="stat"><span class="stat-label">${t('end.difficulty')}</span><span class="stat-value">${difficultyName}</span></div>` : '') +
+      (jokerName ? `<div class="stat"><span class="stat-label">${t('end.joker')}</span><span class="stat-value">${jokerName}</span></div>` : '');
 
     el.innerHTML = `
       <div class="end-card ${won ? 'won' : 'lost'}">
@@ -336,13 +365,13 @@ export class HUD {
         <div class="end-sub">${sub}</div>
         <div class="end-stats">
           ${extraRows}
-          <div class="stat"><span class="stat-label">Turni</span><span class="stat-value">${turn}</span></div>
-          <div class="stat"><span class="stat-label">Mani giocate</span><span class="stat-value">${stats.handsPlayed}</span></div>
-          <div class="stat"><span class="stat-label">Miglior mano</span><span class="stat-value">${stats.bestHandName ?? '—'} · ${stats.bestHandTotal} V</span></div>
-          <div class="stat"><span class="stat-label">Colpo max subìto</span><span class="stat-value">${stats.maxEnemyHit} V</span></div>
-          <div class="stat"><span class="stat-label">Scarti usati</span><span class="stat-value">${stats.discardsUsed}</span></div>
+          <div class="stat"><span class="stat-label">${t('end.turns')}</span><span class="stat-value">${turn}</span></div>
+          <div class="stat"><span class="stat-label">${t('end.handsPlayed')}</span><span class="stat-value">${stats.handsPlayed}</span></div>
+          <div class="stat"><span class="stat-label">${t('end.bestHand')}</span><span class="stat-value">${bestHandName} · ${stats.bestHandTotal} V</span></div>
+          <div class="stat"><span class="stat-label">${t('end.maxHit')}</span><span class="stat-value">${stats.maxEnemyHit} V</span></div>
+          <div class="stat"><span class="stat-label">${t('end.discardsUsed')}</span><span class="stat-value">${stats.discardsUsed}</span></div>
         </div>
-        <button id="btn-restart" class="btn">↻ Nuova Partita</button>
+        <button id="btn-restart" class="btn">${t('end.restart')}</button>
       </div>`;
 
     // Lascia vedere l'animazione 3D (cinematica dell'esplosione / spegnimento del Warden)

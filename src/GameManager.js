@@ -24,6 +24,7 @@ import { scoreHand, bestHand } from './core/combos.js';
 import { GameState, GamePhase, RULES } from './core/GameState.js';
 import { JOKERS, applyJokers } from './core/jokers.js';
 import { DIFFICULTIES, DEFAULT_DIFFICULTY } from './core/difficulty.js';
+import { t, comboLabel } from './core/i18n.js';
 
 // Tempi della sequenza del turno nemico (ms)
 const ENEMY_TIMING = Object.freeze({
@@ -65,14 +66,34 @@ export class GameManager {
     this.state = new GameState(RULES, GamePhase.CHOOSING);
     hud.bindState(this.state);
 
-    hud.setTurnBanner('· STANDBY ·', '#98927f');
-    hud.setStatus('■ Sistema attivo — disinnesca prima che il Warden detoni');
+    this._banner('banner.standby', '#98927f');
+    this._status('status.systemActive', '#98927f');
     hud.setThreat(this.enemyAI.threatMultiplier());
     hud.setDeckCount(this.cards.deckCount);
     this._refreshActions(0);
   }
 
   attachInput(inputManager) { this.input = inputManager; }
+
+  // ── Banner / stato con memoria (per il cambio lingua a partita in corso) ─────
+  // Memorizzano l'ultima chiave i18n + variabili, così relocalize() può
+  // ri-renderizzare nella nuova lingua. Le variabili possono contenere getter
+  // (es. nome joker) così restano corrette anche dopo il cambio.
+  _banner(key, color, vars) {
+    this._lastBanner = { key, color, vars };
+    this.hud.setTurnBanner(t(key, vars), color);
+  }
+
+  _status(key, color, vars) {
+    this._lastStatus = { key, color, vars };
+    this.hud.setStatus(t(key, vars), color);
+  }
+
+  relocalize() {
+    const b = this._lastBanner, s = this._lastStatus;
+    if (b) this.hud.setTurnBanner(t(b.key, b.vars), b.color);
+    if (s) this.hud.setStatus(t(s.key, s.vars), s.color);
+  }
 
   // ── Accessori di compatibilità (usati da InputManager) ──────────────────────
   get phase()        { return this.state.phase; }
@@ -103,9 +124,9 @@ export class GameManager {
   // ── Fase 0: scelta del joker ─────────────────────────────────────────────────
   startJokerChoice() {
     this.jokers.offer(JOKERS);
-    this.hud.setTurnBanner('◆ SCEGLI UN JOKER', '#e5ae32');
+    this._banner('banner.chooseJoker', '#e5ae32');
     this.hud.pulseTurnBanner();
-    this.hud.setStatus('Clicca un oggetto sul banco: ti accompagnerà per tutta la partita');
+    this._status('status.chooseJoker', '#98927f');
   }
 
   chooseJoker(model) {
@@ -127,9 +148,13 @@ export class GameManager {
     this.cards.deal(8);
     this.audio.cardDraw();
     this.hud.setDeckCount(this.cards.deckCount);
-    this.hud.setTurnBanner('► TUO TURNO', '#a4c46a');
+    this._banner('banner.yourTurn', '#a4c46a');
     this.hud.pulseTurnBanner();
-    this.hud.setStatus(`◆ ${def.name}: ${def.desc}`, '#e5ae32');
+    // vars con getter: nome/descrizione restano localizzati anche dopo un cambio lingua
+    this._status('status.jokerActive', '#e5ae32', {
+      get name() { return def.name; },
+      get desc() { return def.desc; },
+    });
     this.showPotentialVoltage(this.input?.selectedCards ?? []);
   }
 
@@ -164,7 +189,7 @@ export class GameManager {
     // sulla bomba e il modulo scatta quando è in quadro.
     const stages = this.bombModel?.setDefuseProgress?.(this.state.defuseProgress, BOMB_CINE.CAM_IN) ?? [];
     if (stages.length && !won) {
-      this.hud.setStatus(`✓ Modulo ${stages[stages.length - 1]}/3 della bomba disinnescato`, '#a4c46a');
+      this._status('status.moduleDefused', '#a4c46a', { n: stages[stages.length - 1] });
       this.scene.focusOnBomb?.({ inMs: BOMB_CINE.CAM_IN, holdMs: BOMB_CINE.CAM_HOLD, outMs: BOMB_CINE.CAM_OUT });
       // Audio, shake e particelle sincronizzati sull'apertura di ciascun modulo,
       // con i burst centrati sull'elemento che si sta aprendo (serratura/pannello)
@@ -209,7 +234,7 @@ export class GameManager {
   // ── Turno del Warden ────────────────────────────────────────────────────────
   _beginEnemyTurn() {
     this.state.beginEnemyPhase();
-    this.hud.setTurnBanner('◆ IL WARDEN GIOCA…', '#d95b38');
+    this._banner('banner.wardenPlays', '#d95b38');
     this._refreshActions(0);
 
     // 1. Il Warden decide la sua giocata
@@ -276,14 +301,17 @@ export class GameManager {
     const { cards, score } = this.bestFromHand(this.cards.hand);
     if (!cards.length) return null;
     this.state.spendSuggestion();
-    this.hud.setStatus(`💡 Suggerito: ${score.combo.name} (+${score.total} V)`, '#e5ae32');
+    const total = score.total, comboName = score.combo.name;
+    this._status('status.suggested', '#e5ae32', {
+      get combo() { return comboLabel(comboName); }, v: total,
+    });
     return cards;
   }
 
   // ── Fine partita ────────────────────────────────────────────────────────────
   _win() {
-    this.hud.setStatus('✓ BOMBA DISINNESCATA', '#a4c46a');
-    this.hud.setTurnBanner('◆ HAI VINTO', '#a4c46a');
+    this._status('status.defused', '#a4c46a');
+    this._banner('banner.win', '#a4c46a');
     this.effects.flash('#a4c46a', 0.5);
     this.audio.victory();
     this.enemyModel?.defeat?.();
@@ -296,8 +324,8 @@ export class GameManager {
   }
 
   _lose() {
-    this.hud.setStatus('☠ GAME OVER — BOOM', '#d95b38');
-    this.hud.setTurnBanner('✖ IL WARDEN HA VINTO', '#d95b38');
+    this._status('status.gameOver', '#d95b38');
+    this._banner('banner.wardenWins', '#d95b38');
     this.cards.clearEnemyPlay();
     this.enemyModel?.triumph?.();
 

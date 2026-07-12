@@ -398,6 +398,15 @@ button { font-family: var(--font-ui); }
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px;
   background: var(--hazard);
 }
+/* Selettore lingua in alto a destra della scheda tutorial */
+#lang-row { position: absolute; top: 14px; right: 16px; }
+.lang-btn {
+  padding: 5px 12px; background: transparent; cursor: pointer;
+  border: 1px solid #55503f; border-radius: 2px; color: var(--c-dim);
+  font-size: 11px; font-weight: 600; letter-spacing: 1px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.lang-btn:hover { border-color: var(--c-accent); color: var(--c-paper); }
 #tutorial h1 {
   font-family: var(--font-display);
   font-size: 38px; letter-spacing: 7px; color: var(--c-accent); font-weight: 400;

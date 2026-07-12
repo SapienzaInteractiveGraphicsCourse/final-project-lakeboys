@@ -78,31 +78,6 @@ total = (comboBaseChips + Σ cardValues) × comboMult
 
 ---
 
-## Running locally
-
-The project uses ES modules with an `importmap` (Three.js and tween.js are loaded
-from a CDN), so **no build step is required** — but it must be served over HTTP,
-because browsers block ES modules loaded from `file://`.
-
-**Option A — any static server:**
-
-```bash
-python3 -m http.server 3000
-# then open http://localhost:3000
-```
-
-**Option B — Vite dev server** (hot reload):
-
-```bash
-npm install
-npm run dev
-```
-
-Runs on desktop Chromium / Firefox. Sound starts on the first click or keypress
-(browser autoplay policy).
-
----
-
 ## Highlights
 
 - **Everything geometric is code.** No 3D model is ever imported: every mesh —
@@ -201,7 +176,4 @@ requirements is in **[`REPORT.pdf`](REPORT.pdf)**.
 - **Environment textures:** CC0 PBR sets from [ambientCG](https://ambientcg.com)
   (*Concrete042C*, *Planks037A*, *PaintedMetal006*).
 - **Music / impact samples:** used for non-commercial academic purposes.
-- All geometry, procedural textures, procedural audio, animations and UI were
-  written by **Team Lakeboys**.
 
-Developed for the Interactive Graphics course, Sapienza University of Rome.

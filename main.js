@@ -24,6 +24,10 @@ import { JokerSystem }   from './src/systems/JokerSystem.js';
 import { EnemyAI }       from './src/core/EnemyAI.js';
 import { HUD }           from './src/ui/HUD.js';
 import { GameManager }   from './src/GameManager.js';
+import { getLang, toggleLang, applyStaticDOM, onLangChange } from './src/core/i18n.js';
+
+// Applica subito la lingua attiva (default inglese) a tutto il DOM statico
+applyStaticDOM();
 
 // ── Bootstrap: mondo 3D ───────────────────────────────────────────────────────
 const sceneManager = new SceneManager();
@@ -75,6 +79,31 @@ window.App = {
   cardSystem, enemyAI, gameManager, inputManager,
   audio, effects, particles, jokerSystem, hud,
 };
+
+// ── Lingua (EN default / IT) ──────────────────────────────────────────────────
+// Le due etichette dei pulsanti mostrano la lingua verso cui si commuterà.
+const btnLang    = document.getElementById('btn-lang');
+const btnLangTut = document.getElementById('btn-lang-tut');
+
+function refreshLangButtons() {
+  const toIT = getLang() === 'en';   // se ora è EN, il toggle porta all'italiano
+  if (btnLang)    btnLang.textContent    = toIT ? '🌐 IT' : '🌐 EN';
+  if (btnLangTut) btnLangTut.textContent = toIT ? '🌐 Italiano' : '🌐 English';
+}
+refreshLangButtons();
+
+// Al cambio lingua: ri-localizza il DOM statico + le stringhe dinamiche vive
+onLangChange(() => {
+  applyStaticDOM();
+  hud.relocalize();
+  gameManager.relocalize();
+  hud.setDeckCount(cardSystem.deckCount);
+  refreshLangButtons();
+});
+
+const switchLang = () => { audio.cardSelect?.(); toggleLang(); };
+btnLang?.addEventListener('click', switchLang);
+btnLangTut?.addEventListener('click', switchLang);
 
 // ── Tutorial iniziale: difficoltà + avvio ─────────────────────────────────────
 document.querySelectorAll('.diff-btn').forEach(btn => {
