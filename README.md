@@ -1,4 +1,5 @@
 # Defuse-Deck 3D
+https://sapienzainteractivegraphicscourse.github.io/final-project-lakeboys/
 
 > A turn-based card duel where you defuse a bomb by playing poker hands —
 > built from scratch with **Three.js**. Procedural geometry and animation,
